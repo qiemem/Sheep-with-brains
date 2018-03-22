@@ -472,10 +472,10 @@ middle-layers
 String (reporter)
 
 BUTTON
-220
-315
-297
-348
+350
+480
+427
+513
 inspect
 if mouse-inside? and mouse-down? [\n  every 0.2 [\n    ask min-one-of turtles [ distancexy mouse-xcor mouse-ycor ] [\n      inspect self\n      watch-me\n      ls:show brain\n      display\n    ]\n  ]\n]
 T
@@ -496,6 +496,23 @@ TEXTBOX
 Brain settings
 11
 0.0
+1
+
+BUTTON
+430
+480
+567
+513
+reset-perspective
+reset-perspective\nls:hide ls:models
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
 1
 
 @#$#@#$#@
@@ -904,7 +921,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.0.1
+NetLogo 6.0.3-RC1
 @#$#@#$#@
 setup
 set grass? true
