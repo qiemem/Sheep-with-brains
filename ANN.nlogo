@@ -28,8 +28,7 @@ to setup [ layer-counts ]
   let max-y max (list max-layer-size 15)
   resize-world 0 max-x (- max-y) max-y
 
-  foreach layer-counts [ [?1] ->
-    let layer-size ?1
+  foreach layer-counts [ layer-size ->
     let layer-num length layers
     let layer no-turtles
     crt layer-size [ set layer (turtle-set layer self) ]
@@ -37,8 +36,8 @@ to setup [ layer-counts ]
     let x (layer-num + 0.5) / num-layers * max-pxcor
 
     let i 0
-    foreach sort layer [ [??1] ->
-      ask ??1 [
+    foreach sort layer [ node ->
+      ask node [
         let y 2 * (0.5 - (i + 0.5) / layer-size) * max-pycor
         setxy x y
         set color grey
@@ -48,9 +47,9 @@ to setup [ layer-counts ]
 
     set layers lput layer layers
   ]
-  (foreach (but-first layers) (but-last layers) [ [?1 ?2] ->
-    ask ?1 [
-      create-links-from ?2 [
+  (foreach (but-first layers) (but-last layers) [ [latter former] ->
+    ask latter [
+      create-links-from former [
         set-weight 0
       ]
     ]
@@ -69,19 +68,19 @@ to-report apply [ input ]
 end
 
 to-report apply-bools [ input ]
-  let result apply-reals map [ [?1] -> ifelse-value ?1 [1][0] ] input
-  report map [ [?1] -> ?1 > 0.5 ] result
+  let result apply-reals map [ b -> ifelse-value b [1][0] ] input
+  report map [ x -> x > 0.5 ] result
 end
 
 to-report apply-reals [ input ]
   set-input input
   propogate
-  report map [ [?1] -> [ activation ] of ?1 ] output-node-list
+  report map [ node -> [ activation ] of node ] output-node-list
 end
 
 to set-input [ input ]
-  (foreach input-node-list input [ [?1 ?2] ->
-    ask ?1 [ set-activation ?2 ]
+  (foreach input-node-list input [ [node x] ->
+    ask node [ set-activation x ]
   ])
 end
 
@@ -97,13 +96,9 @@ to click-input
   ]
 end
 
-to-report get-output
-  report map [ [?1] -> [activation] of ?1 > 0.5 ] output-node-list
-end
-
 to propogate
-  foreach but-first layers [ [?1] ->
-    ask ?1 [ update-activation ]
+  foreach but-first layers [ layer ->
+    ask layer [ update-activation ]
   ]
 end
 
@@ -124,23 +119,23 @@ to set-activation [ a ]
 end
 
 to set-weights [ weights ]
-  (foreach (sort links) (weights) [ [?1 ?2] ->
-    ask ?1 [ set-weight ?2 ]
+  (foreach (sort links) (weights) [ [l w] ->
+    ask l [ set-weight w ]
   ])
 end
 
 to set-biases [ biases ]
-  (foreach (sort turtles) (biases) [ [?1 ?2] ->
-    ask ?1 [ set-bias ?2 ]
+  (foreach (sort turtles) (biases) [ [node b] ->
+    ask node [ set-bias b ]
   ])
 end
 
 to-report get-weights
-  report map [ [?1] -> [weight] of ?1 ] sort links
+  report map [ l -> [weight] of l ] sort links
 end
 
 to-report get-biases
-  report map [ [?1] -> [bias] of ?1 ] sort turtles
+  report map [ t -> [bias] of t ] sort turtles
 end
 
 to set-weight [ w ]
@@ -237,7 +232,7 @@ INPUTBOX
 168
 74
 enter-layers
-[4 2]
+[4 4 2]
 1
 0
 String (reporter)
@@ -264,8 +259,8 @@ BUTTON
 129
 160
 162
-NIL
 randomize-weights
+randomize-weights\npropogate
 NIL
 1
 T
@@ -618,7 +613,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.0.3-RC1
+NetLogo 6.0.3
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@

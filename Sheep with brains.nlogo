@@ -1,4 +1,4 @@
-extensions [ ls ]
+extensions [ ls CSV ]
 
 
 globals [
@@ -7,12 +7,24 @@ globals [
   outputs
   brain-pool
   layers
+
+  inspectable-brain
+
+  sheep-towards-grass
+  sheep-towards-sheep
+  sheep-towards-wolves
+  wolves-towards-grass
+  wolves-towards-sheep
+  wolves-towards-wolves
 ]
 
 ;; Sheep and wolves are both breeds of turtle.
 breed [sheep a-sheep]  ;; sheep is its own plural, so we use "a-sheep" as the singular.
 breed [wolves wolf]
-turtles-own [energy brain]       ;; both wolves and sheep have energy
+turtles-own [
+  energy
+  brain
+]
 patches-own [countdown]
 
 to setup
@@ -68,7 +80,10 @@ to setup
     setxy random-xcor random-ycor
   ]
 
-  ask turtles [ setup-brain ]
+  ask turtles [
+    setup-brain
+    add-stats
+  ]
 
   display-labels
   set grass count patches with [pcolor = green]
@@ -102,7 +117,7 @@ end
 
 to setup-brain
   ifelse empty? brain-pool [
-    (ls:create-models 1 "ANN.nlogo" [ id -> set brain id ])
+    (ls:create-models 1 "ANN.nlogo" [ id -> ls:hide id set brain id ])
   ] [
     set brain first brain-pool
     set brain-pool but-first brain-pool
@@ -131,7 +146,7 @@ end
 
 to-report apply-brain [ in ]
   ls:let inputs in
-  report ls:report brain [ apply-bools inputs ]
+  report [ apply-bools inputs ] ls:of brain
 end
 
 to move  ;; turtle procedure
@@ -150,9 +165,9 @@ end
 
 to reproduce
   if random 100 < reproduce-% [
-    set energy (energy / 2)               ;; divide energy between parent and offspring
+    set energy (energy / 2)
     ls:let child-weights map [ w -> random-normal w 0.05 ] [get-weights] ls:of brain
-    ls:let child-biases map [ w -> random-normal w 0.05 ] [get-biases] ls:of brain
+    ls:let child-biases map [ b -> random-normal b 0.05 ] [get-biases] ls:of brain
     hatch 1 [
       setup-brain
       ls:ask brain [
@@ -160,6 +175,7 @@ to reproduce
         set-biases child-biases
       ]
       rt random-float 360 fd 1
+      add-stats
     ]
   ]
 end
@@ -179,6 +195,7 @@ to death  ;; turtle procedure
 end
 
 to kill
+  delete-stats
   ls:set-name brain "In pool"
   set brain-pool fput brain brain-pool
   die
@@ -203,14 +220,83 @@ to display-labels
   ]
 end
 
+to-report one-hot [ n i ]
+  report n-values n [ j -> i = j ]
+end
+
+to-report towards-type [ offset agents ]
+  ls:let agent-left one-hot 9 (offset + 0)
+  ls:let agent-front one-hot 9 (offset + 1)
+  ls:let agent-right one-hot 9 (offset + 2)
+  let left-results [ apply-bools agent-left ] ls:of [ brain ] of agents
+  let front-results [ apply-bools agent-front ] ls:of [ brain ] of agents
+  let right-results [ apply-bools agent-right ] ls:of [ brain ] of agents
+  report (
+    (length filter turn-left?  left-results) +
+    (length filter go-straight? front-results) +
+    (length filter turn-right? right-results)
+  ) / (3 * count agents)
+end
+
+to-report turn-left? [ activation ]
+  report first activation and not last activation
+end
+
+to-report go-straight? [ activation ]
+  report (first activation and last activation) or (not first activation and not last activation)
+end
+
+to-report turn-right? [ activation ]
+  report not first activation and last activation
+end
+
+to add-stats
+  if is-a-sheep? self [
+    set sheep-towards-grass sheep-towards-grass + towards-type 0 (turtle-set self)
+    set sheep-towards-sheep sheep-towards-sheep + towards-type 3 (turtle-set self)
+    set sheep-towards-wolves sheep-towards-wolves + towards-type 6 (turtle-set self)
+  ]
+  if is-wolf? self [
+    set wolves-towards-grass wolves-towards-grass + towards-type 0 (turtle-set self)
+    set wolves-towards-sheep wolves-towards-sheep + towards-type 3 (turtle-set self)
+    set wolves-towards-wolves wolves-towards-wolves + towards-type 6 (turtle-set self)
+  ]
+end
+
+to delete-stats
+  if is-a-sheep? self [
+    set sheep-towards-grass sheep-towards-grass - towards-type 0 (turtle-set self)
+    set sheep-towards-sheep sheep-towards-sheep - towards-type 3 (turtle-set self)
+    set sheep-towards-wolves sheep-towards-wolves - towards-type 6 (turtle-set self)
+  ]
+  if is-wolf? self [
+    set wolves-towards-grass wolves-towards-grass - towards-type 0 (turtle-set self)
+    set wolves-towards-sheep wolves-towards-sheep - towards-type 3 (turtle-set self)
+    set wolves-towards-wolves wolves-towards-wolves - towards-type 6 (turtle-set self)
+  ]
+end
+
+to inspect-brain
+  if mouse-inside? and mouse-down? [
+    every 0.2 [
+      ask min-one-of turtles [ distancexy mouse-xcor mouse-ycor ] [
+        inspect self
+        watch-me
+        ls:show brain
+        display
+      ]
+    ]
+  ]
+end
+
 
 ; Copyright 1997 Uri Wilensky.
 ; See Info tab for full copyright and license.
 @#$#@#$#@
 GRAPHICS-WINDOW
-350
+745
 10
-817
+1212
 478
 -1
 -1
@@ -424,7 +510,7 @@ vision
 vision
 0
 5
-2.0
+3.0
 0.5
 1
 NIL
@@ -439,7 +525,7 @@ reproduce-%
 reproduce-%
 0
 5
-4.0
+2.0
 1
 1
 NIL
@@ -466,18 +552,18 @@ INPUTBOX
 160
 355
 middle-layers
-[9]
+9
 1
 0
 String (reporter)
 
 BUTTON
-350
+745
 480
-427
+822
 513
 inspect
-if mouse-inside? and mouse-down? [\n  every 0.2 [\n    ask min-one-of turtles [ distancexy mouse-xcor mouse-ycor ] [\n      inspect self\n      watch-me\n      ls:show brain\n      display\n    ]\n  ]\n]
+inspect-brain
 T
 1
 T
@@ -499,9 +585,9 @@ Brain settings
 1
 
 BUTTON
-430
+825
 480
-567
+962
 513
 reset-perspective
 reset-perspective\nls:hide ls:models
@@ -514,6 +600,46 @@ NIL
 NIL
 NIL
 1
+
+PLOT
+345
+10
+740
+190
+sheep-reactions
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+true
+"" ""
+PENS
+"towards-grass" 1.0 0 -10899396 true "" "plot sheep-towards-grass / count sheep"
+"towards-sheep" 1.0 0 -13345367 true "" "plot sheep-towards-sheep / count sheep"
+"towards-wolves" 1.0 0 -2674135 true "" "plot sheep-towards-wolves / count sheep"
+
+PLOT
+345
+190
+740
+375
+wolf-reactions
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+true
+"" ""
+PENS
+"towards-grass" 1.0 0 -10899396 true "" "plot wolves-towards-grass / count wolves"
+"towards-sheep" 1.0 0 -13345367 true "" "plot wolves-towards-sheep / count wolves"
+"towards-wolves" 1.0 0 -2674135 true "" "plot wolves-towards-wolves / count wolves"
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -921,13 +1047,63 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.0.3-RC1
+NetLogo 6.0.3
 @#$#@#$#@
 setup
 set grass? true
 repeat 75 [ go ]
 @#$#@#$#@
 @#$#@#$#@
+<experiments>
+  <experiment name="experiment" repetitions="10" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="50000"/>
+    <exitCondition>(not any? sheep) or (not any? wolves)</exitCondition>
+    <metric>count sheep</metric>
+    <metric>count wolves</metric>
+    <metric>grass</metric>
+    <metric>sheep-towards-grass</metric>
+    <metric>sheep-towards-sheep</metric>
+    <metric>sheep-towards-wolves</metric>
+    <metric>wolves-towards-grass</metric>
+    <metric>wolves-towards-sheep</metric>
+    <metric>wolves-towards-wolves</metric>
+    <enumeratedValueSet variable="middle-layers">
+      <value value="&quot;[9]&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolf-gain-from-food">
+      <value value="20"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="grass?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="show-energy?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="reproduce-%">
+      <value value="4"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fov">
+      <value value="120"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-wolves">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="vision">
+      <value value="3"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-sheep">
+      <value value="100"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-gain-from-food">
+      <value value="4"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="grass-regrowth-time">
+      <value value="40"/>
+    </enumeratedValueSet>
+  </experiment>
+</experiments>
 @#$#@#$#@
 @#$#@#$#@
 default
