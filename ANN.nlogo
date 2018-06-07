@@ -1,11 +1,15 @@
+extensions [ cf ]
+
 globals [
   layers
+  activation-lambdas
   input-node-list
   output-node-list
 ]
 
 turtles-own [
-  activation
+  output
+  input
   bias ;; innate activation
 ]
 
@@ -14,10 +18,10 @@ links-own [
 ]
 
 to setup-testing
-  setup runresult enter-layers
+  setup runresult enter-layers runresult activations
 end
 
-to setup [ layer-counts ]
+to setup [ layer-counts activation-names ]
   ca
   set-default-shape turtles "circle"
   set layers []
@@ -27,6 +31,24 @@ to setup [ layer-counts ]
   let max-x max (list (2 * num-layers) 30)
   let max-y max (list max-layer-size 15)
   resize-world 0 max-x (- max-y) max-y
+
+  set activation-lambdas map [ act ->
+    (cf:ifelse-value
+      act = "relu" [-> [ nodes -> ask nodes [ set-output relu input ] ] ]
+      act = "sigmoid" [-> [ nodes -> ask nodes [ set-output sigmoid input ] ] ]
+      act = "tanh" [-> [ nodes -> ask nodes [ set-output tanh input ] ] ]
+      act = "softmax" [-> [ nodes ->
+        let total sum [ exp input ] of nodes
+        ask nodes [
+          set-output (exp input) / total
+        ]
+      ]]
+    )
+  ] activation-names
+
+  if length activation-lambdas != length layer-counts - 1 [
+    error "activations and layer counts don't match"
+  ]
 
   foreach layer-counts [ layer-size ->
     let layer-num length layers
@@ -59,28 +81,28 @@ to setup [ layer-counts ]
   reset-ticks
 end
 
-to-report apply [ input ]
-  ifelse is-number? first input [
-    report apply-reals input
+to-report apply [ in ]
+  ifelse is-number? first in [
+    report apply-reals in
   ] [
-    report apply-bools input
+    report apply-bools in
   ]
 end
 
-to-report apply-bools [ input ]
-  let result apply-reals map [ b -> ifelse-value b [1][0] ] input
+to-report apply-bools [ in ]
+  let result apply-reals map [ b -> ifelse-value b [1][0] ] in
   report map [ x -> x > 0.5 ] result
 end
 
-to-report apply-reals [ input ]
-  set-input input
+to-report apply-reals [ in ]
+  set-input in
   propogate
-  report map [ node -> [ activation ] of node ] output-node-list
+  report map [ node -> [ output ] of node ] output-node-list
 end
 
-to set-input [ input ]
-  (foreach input-node-list input [ [node x] ->
-    ask node [ set-activation x ]
+to set-input [ in ]
+  (foreach input-node-list in [ [node x] ->
+    ask node [ set-output x ]
   ])
 end
 
@@ -88,18 +110,21 @@ to click-input
   if mouse-inside? and mouse-down? [
     every 0.2 [
       ask min-one-of first layers [ distancexy mouse-xcor mouse-ycor ] [
-        set-activation ifelse-value (activation > 0.5)[ 0 ] [ 1 ]
+        set-output ifelse-value (output > 0.5)[ 0 ] [ 1 ]
         propogate
-        display
       ]
     ]
   ]
 end
 
 to propogate
-  foreach but-first layers [ layer ->
-    ask layer [ update-activation ]
-  ]
+  (foreach (but-first layers) activation-lambdas [ [layer act] ->
+    ask layer [
+      set input bias + sum [ link-output ] of my-in-links
+    ]
+    (run act layer)
+    display
+  ])
 end
 
 to randomize-weights
@@ -108,14 +133,14 @@ to randomize-weights
   display
 end
 
-to update-activation
-  let incoming sum [ weight * [ activation ] of other-end ] of my-in-links
-  set-activation activation-function (bias + incoming)
+to-report link-output
+  report weight * [ output ] of end1
 end
 
-to set-activation [ a ]
-  set activation a
+to set-output [ a ]
+  set output a
   recolor
+  if color-links? [ ask my-out-links [ update-link-look ] ]
 end
 
 to set-weights [ weights ]
@@ -151,45 +176,65 @@ to set-bias [ b ]
 end
 
 to recolor
-  ifelse activation > 0.5 [
-    set color yellow
+  ifelse output > 0.5 [
+    set color yellow - 2
   ] [
     set color grey
   ]
-  set size 0.5 + activation
+  set size 0.5 + tanh abs output
 end
 
 to update-link-look
-  ;; given full activation of source
-  let w activation-function weight
-  if w > 0.5 [
-    set color red
+  let a tanh (weight * [ output ] of end1)
+  let alpha 128 + 127 * (abs a)
+  if a > 0 [
+    set color (list 255 0 0 alpha)
   ]
-  if w = 0.5 [
-    set color grey
+  if a = 0 [
+    let w tanh weight
+    let r 128 + 64 * relu w
+    let b 128 + 64 * relu (0 - w)
+    set color (list r 128 b alpha)
   ]
-  if w < 0.5 [
-    set color blue
+  if a < 0 [
+    set color (list 0 0 255 alpha)
   ]
-  set thickness abs (w - 0.5)
+  ;let v abs w
+  ;set thickness (v / (v + 1))
+  set thickness 0.2
 end
 
 to-report activation-function [ x ]
-  report sigmoid x
+  report relu x
+end
+
+to-report relu [ x ]
+  if x < 0 [
+    report 0
+  ]
+  report x
+end
+
+to-report tanh [ x ]
+  if x > 20 [ report 1 ]
+  if x < -20 [ report -1 ]
+  let ex exp x
+  let enx exp (0 - x)
+  report (ex - enx) / (ex + enx)
 end
 
 to-report sigmoid [x]
-  report 1 / (1 + e ^ (- x))
+  report 1 / (1 + exp (- x))
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
 173
-10
-584
-422
+14
+576
+418
 -1
 -1
-13.0
+12.742
 1
 10
 1
@@ -210,10 +255,10 @@ ticks
 30.0
 
 BUTTON
-38
-169
-136
-202
+37
+382
+135
+415
 NIL
 click-input
 T
@@ -232,16 +277,16 @@ INPUTBOX
 168
 74
 enter-layers
-[4 4 2]
+[3 3 2]
 1
 0
 String (reporter)
 
 BUTTON
-29
-84
-145
-117
+28
+297
+144
+330
 NIL
 setup-testing
 NIL
@@ -255,10 +300,10 @@ NIL
 1
 
 BUTTON
-9
-129
-160
-162
+8
+342
+159
+375
 randomize-weights
 randomize-weights\npropogate
 NIL
@@ -270,6 +315,28 @@ NIL
 NIL
 NIL
 1
+
+INPUTBOX
+13
+75
+168
+135
+activations
+[\"relu\" \"softmax\"]
+1
+0
+String (reporter)
+
+SWITCH
+20
+155
+147
+188
+color-links?
+color-links?
+0
+1
+-1000
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -613,7 +680,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.0.3
+NetLogo 6.0.4-RC1
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
@@ -630,5 +697,5 @@ true
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
 @#$#@#$#@
-0
+1
 @#$#@#$#@

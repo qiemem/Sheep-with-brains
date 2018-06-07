@@ -1,4 +1,4 @@
-extensions [ ls CSV ]
+extensions [ ls rnd ]
 
 
 globals [
@@ -16,6 +16,13 @@ globals [
   wolves-towards-grass
   wolves-towards-sheep
   wolves-towards-wolves
+
+  null-sheep-towards-grass
+  null-sheep-towards-sheep
+  null-sheep-towards-wolves
+  null-wolves-towards-grass
+  null-wolves-towards-sheep
+  null-wolves-towards-wolves
 ]
 
 ;; Sheep and wolves are both breeds of turtle.
@@ -24,6 +31,7 @@ breed [wolves wolf]
 turtles-own [
   energy
   brain
+  null-brain
 ]
 patches-own [countdown]
 
@@ -32,23 +40,24 @@ to setup
   set brain-pool ls:models
 
   set inputs (list
-    [ -> any? (in-vision-at patches (- fov / 3)) with [ pcolor = green ] ]
-    [ -> any? (in-vision-at patches 0) with [ pcolor = green ] ]
-    [ -> any? (in-vision-at patches (fov / 3)) with [ pcolor = green ] ]
-    [ -> any? other (in-vision-at sheep (- fov / 3)) ]
-    [ -> any? other (in-vision-at sheep 0) ]
-    [ -> any? other (in-vision-at sheep (fov / 3)) ]
-    [ -> any? other (in-vision-at wolves (- fov / 3)) ]
-    [ -> any? other (in-vision-at wolves 0) ]
-    [ -> any? other (in-vision-at wolves (fov / 3)) ]
+    [ -> binary any? (in-vision-at patches (- fov / 3)) with [ pcolor = green ] ]
+    [ -> binary any? (in-vision-at patches 0) with [ pcolor = green ] ]
+    [ -> binary any? (in-vision-at patches (fov / 3)) with [ pcolor = green ] ]
+    [ -> binary any? other (in-vision-at sheep (- fov / 3)) ]
+    [ -> binary any? other (in-vision-at sheep 0) ]
+    [ -> binary any? other (in-vision-at sheep (fov / 3)) ]
+    [ -> binary any? other (in-vision-at wolves (- fov / 3)) ]
+    [ -> binary any? other (in-vision-at wolves 0) ]
+    [ -> binary any? other (in-vision-at wolves (fov / 3)) ]
   )
 
   set outputs (list
-    [ activated? -> if activated? [ lt 30 ] ]
-    [ activated? -> if activated? [ rt 30 ] ]
+    [-> lt 30]
+    [->]
+    [-> rt 30]
   )
 
-  set layers (sentence (length inputs) (runresult middle-layers) (length outputs))
+  set layers (sentence (length inputs) (length inputs) (length outputs))
 
   ask patches [ set pcolor green ]
   ;; check GRASS? switch.
@@ -85,7 +94,6 @@ to setup
     add-stats
   ]
 
-  display-labels
   set grass count patches with [pcolor = green]
   reset-ticks
 end
@@ -112,18 +120,31 @@ to go
   set grass count patches with [pcolor = green]
   ask turtles [ ls:display brain ]
   tick
-  display-labels
 end
 
-to setup-brain
+to-report make-brain
+  let b 0
   ifelse empty? brain-pool [
-    (ls:create-models 1 "ANN.nlogo" [ id -> ls:hide id set brain id ])
+    (ls:create-models 1 "ANN.nlogo" [ id -> ls:hide id set b id ])
   ] [
-    set brain first brain-pool
+    set b first brain-pool
     set brain-pool but-first brain-pool
   ]
   ls:set-name brain (word "Brain of " self)
-  (ls:ask brain [ ls -> setup ls randomize-weights ] layers)
+  (ls:ask b [ ls ->
+    set color-links? false
+    setup ls ["relu" "softmax"]
+    randomize-weights
+  ] layers)
+  report b
+end
+
+
+to setup-brain
+  set brain make-brain
+  if include-null? [
+    set null-brain make-brain
+  ]
 end
 
 to-report in-vision-at [ agentset angle ]
@@ -134,9 +155,14 @@ to-report in-vision-at [ agentset angle ]
 end
 
 to go-brain
-  (foreach outputs sense [ [behavior input] ->
-    (run behavior input)
-  ])
+  let r random-float 1
+  let i -1
+  let probs sense
+  while [ r > 0 and i < length probs ] [
+    set i i + 1
+    set r r - item i probs
+  ]
+  run item i outputs
   fd 1
 end
 
@@ -146,7 +172,7 @@ end
 
 to-report apply-brain [ in ]
   ls:let inputs in
-  report [ apply-bools inputs ] ls:of brain
+  report [ apply-reals inputs ] ls:of brain
 end
 
 to move  ;; turtle procedure
@@ -166,8 +192,9 @@ end
 to reproduce
   if random 100 < reproduce-% [
     set energy (energy / 2)
-    ls:let child-weights map [ w -> random-normal w 0.05 ] [get-weights] ls:of brain
-    ls:let child-biases map [ b -> random-normal b 0.05 ] [get-biases] ls:of brain
+    ls:let child-weights map [ w -> random-normal w mut-rate ] [get-weights] ls:of brain
+    ls:let child-biases map [ b -> random-normal b mut-rate ] [get-biases] ls:of brain
+    let child nobody
     hatch 1 [
       setup-brain
       ls:ask brain [
@@ -175,6 +202,19 @@ to reproduce
         set-biases child-biases
       ]
       rt random-float 360 fd 1
+      set child self
+    ]
+    if include-null? [
+      ls:let null-weights map [ w -> random-normal w mut-rate ] [get-weights] ls:of null-brain
+      ls:let null-biases map [ b -> random-normal b mut-rate ] [get-biases] ls:of null-brain
+      ask child [
+        ls:ask null-brain [
+          set-weights null-weights
+          set-biases null-biases
+        ]
+      ]
+    ]
+    ask child [
       add-stats
     ]
   ]
@@ -198,6 +238,9 @@ to kill
   delete-stats
   ls:set-name brain "In pool"
   set brain-pool fput brain brain-pool
+  if include-null? [
+    set brain-pool fput null-brain brain-pool
+  ]
   die
 end
 
@@ -212,35 +255,25 @@ to grow-grass  ;; patch procedure
   ]
 end
 
-to display-labels
-  ask turtles [ set label "" ]
-  if show-energy? [
-    ask wolves [ set label round energy ]
-    if grass? [ ask sheep [ set label round energy ] ]
-  ]
-end
-
 to-report one-hot [ n i ]
-  report n-values n [ j -> i = j ]
+  report n-values n [ j -> binary (i = j) ]
 end
 
-to-report towards-type [ offset agents ]
-  ls:let agent-left one-hot 9 (offset + 0)
-  ls:let agent-front one-hot 9 (offset + 1)
-  ls:let agent-right one-hot 9 (offset + 2)
-  let left-results [ apply-bools agent-left ] ls:of [ brain ] of agents
-  let front-results [ apply-bools agent-front ] ls:of [ brain ] of agents
-  let right-results [ apply-bools agent-right ] ls:of [ brain ] of agents
-  report (
-    (length filter turn-left?  left-results) +
-    (length filter go-straight? front-results) +
-    (length filter turn-right? right-results)
-  ) / (3 * count agents)
+to-report towards-type [ offset model ]
+  report mean map [ off ->
+    item off (ls:report model [ in -> apply-reals in ] one-hot 9 (offset + off))
+  ] range 3
 end
 
 to-report turn-left? [ activation ]
   report first activation and not last activation
 end
+
+to-report binary [ bool ]
+  if bool [ report 1 ]
+  report 0
+end
+
 
 to-report go-straight? [ activation ]
   report (first activation and last activation) or (not first activation and not last activation)
@@ -251,40 +284,99 @@ to-report turn-right? [ activation ]
 end
 
 to add-stats
-  if is-a-sheep? self [
-    set sheep-towards-grass sheep-towards-grass + towards-type 0 (turtle-set self)
-    set sheep-towards-sheep sheep-towards-sheep + towards-type 3 (turtle-set self)
-    set sheep-towards-wolves sheep-towards-wolves + towards-type 6 (turtle-set self)
-  ]
-  if is-wolf? self [
-    set wolves-towards-grass wolves-towards-grass + towards-type 0 (turtle-set self)
-    set wolves-towards-sheep wolves-towards-sheep + towards-type 3 (turtle-set self)
-    set wolves-towards-wolves wolves-towards-wolves + towards-type 6 (turtle-set self)
-  ]
+  change-stats 1
 end
 
 to delete-stats
+  change-stats -1
+end
+
+to change-stats [ scale ]
   if is-a-sheep? self [
-    set sheep-towards-grass sheep-towards-grass - towards-type 0 (turtle-set self)
-    set sheep-towards-sheep sheep-towards-sheep - towards-type 3 (turtle-set self)
-    set sheep-towards-wolves sheep-towards-wolves - towards-type 6 (turtle-set self)
+    set sheep-towards-grass sheep-towards-grass + scale * towards-type 0 brain
+    set sheep-towards-sheep sheep-towards-sheep + scale * towards-type 3 brain
+    set sheep-towards-wolves sheep-towards-wolves + scale * towards-type 6 brain
   ]
   if is-wolf? self [
-    set wolves-towards-grass wolves-towards-grass - towards-type 0 (turtle-set self)
-    set wolves-towards-sheep wolves-towards-sheep - towards-type 3 (turtle-set self)
-    set wolves-towards-wolves wolves-towards-wolves - towards-type 6 (turtle-set self)
+    set wolves-towards-grass wolves-towards-grass + scale * towards-type 0 brain
+    set wolves-towards-sheep wolves-towards-sheep + scale * towards-type 3 brain
+    set wolves-towards-wolves wolves-towards-wolves + scale * towards-type 6 brain
+  ]
+  if include-null? [
+    if is-a-sheep? self [
+      set null-sheep-towards-grass null-sheep-towards-grass + scale * towards-type 0 null-brain
+      set null-sheep-towards-sheep null-sheep-towards-sheep + scale * towards-type 3 null-brain
+      set null-sheep-towards-wolves null-sheep-towards-wolves + scale * towards-type 6 null-brain
+    ]
+    if is-wolf? self [
+      set null-wolves-towards-grass null-wolves-towards-grass + scale * towards-type 0 null-brain
+      set null-wolves-towards-sheep null-wolves-towards-sheep + scale * towards-type 3 null-brain
+      set null-wolves-towards-wolves null-wolves-towards-wolves + scale * towards-type 6 null-brain
+    ]
   ]
 end
 
+to-report safe-div [ n d ]
+  if d = 0 [ report 0 ]
+  report n / d
+end
+
+to-report s-to-g
+  report safe-div sheep-towards-grass count sheep
+end
+to-report s-to-s
+  report safe-div sheep-towards-sheep count sheep
+end
+to-report s-to-w
+  report safe-div sheep-towards-wolves count sheep
+end
+to-report w-to-g
+  report safe-div wolves-towards-grass count wolves
+end
+to-report w-to-s
+  report safe-div wolves-towards-sheep count wolves
+end
+to-report w-to-w
+  report safe-div wolves-towards-wolves count wolves
+end
+
+to-report null-s-to-g
+  report safe-div null-sheep-towards-grass count sheep
+end
+to-report null-s-to-s
+  report safe-div null-sheep-towards-sheep count sheep
+end
+to-report null-s-to-w
+  report safe-div null-sheep-towards-wolves count sheep
+end
+to-report null-w-to-g
+  report safe-div null-wolves-towards-grass count wolves
+end
+to-report null-w-to-s
+  report safe-div null-wolves-towards-sheep count wolves
+end
+to-report null-w-to-w
+  report safe-div null-wolves-towards-wolves count wolves
+end
+
+
+
 to inspect-brain
-  if mouse-inside? and mouse-down? [
-    every 0.2 [
-      ask min-one-of turtles [ distancexy mouse-xcor mouse-ycor ] [
-        inspect self
-        watch-me
-        ls:show brain
-        display
+  if mouse-inside? [
+    ask min-one-of turtles [ distancexy mouse-xcor mouse-ycor ] [
+      if subject != self [
+        ask turtle-set subject [
+          ls:hide brain
+        ]
       ]
+      set shape "default"
+      watch-me
+      ls:ask brain [
+        set color-links? true
+        ask links [ update-link-look ]
+      ]
+      ls:show brain
+      display
     ]
   ]
 end
@@ -400,16 +492,16 @@ grass-regrowth-time
 grass-regrowth-time
 0
 100
-40.0
+30.0
 1
 1
 NIL
 HORIZONTAL
 
 BUTTON
-5
+190
 10
-74
+259
 43
 setup
 setup
@@ -424,9 +516,9 @@ NIL
 1
 
 BUTTON
-87
+272
 10
-154
+339
 43
 go
 go
@@ -443,8 +535,8 @@ NIL
 PLOT
 5
 360
-321
-557
+320
+555
 populations
 time
 pop.
@@ -489,17 +581,6 @@ Grass settings
 11
 0.0
 0
-
-SWITCH
-164
-10
-300
-43
-show-energy?
-show-energy?
-1
-1
--1000
 
 SLIDER
 5
@@ -546,30 +627,19 @@ fov
 NIL
 HORIZONTAL
 
-INPUTBOX
-5
-295
-160
-355
-middle-layers
-9
-1
-0
-String (reporter)
-
 BUTTON
-745
-480
-822
-513
+345
+375
+420
+408
 inspect
 inspect-brain
-T
+NIL
 1
 T
 OBSERVER
 NIL
-NIL
+I
 NIL
 NIL
 1
@@ -585,12 +655,12 @@ Brain settings
 1
 
 BUTTON
-825
-480
-962
-513
+420
+375
+550
+408
 reset-perspective
-reset-perspective\nls:hide ls:models
+ask turtles [ stop-inspecting self ]\nreset-perspective\nstop-inspecting-dead-agents\nls:hide ls:models\nls:ask ls:models [ set color-links? false ]\nask sheep [ set shape \"sheep\" ]\nask wolves [ set shape \"wolf\" ]
 NIL
 1
 T
@@ -617,9 +687,9 @@ true
 true
 "" ""
 PENS
-"towards-grass" 1.0 0 -10899396 true "" "plot sheep-towards-grass / count sheep"
-"towards-sheep" 1.0 0 -13345367 true "" "plot sheep-towards-sheep / count sheep"
-"towards-wolves" 1.0 0 -2674135 true "" "plot sheep-towards-wolves / count sheep"
+"towards-grass" 1.0 0 -10899396 true "" "plot s-to-g"
+"towards-sheep" 1.0 0 -13345367 true "" "plot s-to-s"
+"towards-wolves" 1.0 0 -2674135 true "" "plot s-to-w"
 
 PLOT
 345
@@ -637,9 +707,87 @@ true
 true
 "" ""
 PENS
-"towards-grass" 1.0 0 -10899396 true "" "plot wolves-towards-grass / count wolves"
-"towards-sheep" 1.0 0 -13345367 true "" "plot wolves-towards-sheep / count wolves"
-"towards-wolves" 1.0 0 -2674135 true "" "plot wolves-towards-wolves / count wolves"
+"towards-grass" 1.0 0 -10899396 true "" "plot w-to-g"
+"towards-sheep" 1.0 0 -13345367 true "" "plot w-to-s"
+"towards-wolves" 1.0 0 -2674135 true "" "plot w-to-w"
+
+MONITOR
+320
+510
+377
+555
+sheep
+count sheep
+17
+1
+11
+
+MONITOR
+320
+465
+377
+510
+wolves
+count wolves
+17
+1
+11
+
+SWITCH
+5
+10
+140
+43
+include-null?
+include-null?
+1
+1
+-1000
+
+INPUTBOX
+180
+295
+345
+355
+mut-rate
+0.1
+1
+0
+Number
+
+BUTTON
+550
+375
+675
+408
+update-subject
+ask turtle-set subject [ __ignore sense ]
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+675
+375
+740
+408
+drag
+if mouse-down? and mouse-inside? [\n  ask min-one-of turtles [ distancexy mouse-xcor mouse-ycor ] [\n    setxy mouse-xcor mouse-ycor\n  ]\n]\ndisplay
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1047,7 +1195,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.0.3
+NetLogo 6.0.4-RC1
 @#$#@#$#@
 setup
 set grass? true
@@ -1100,7 +1248,115 @@ repeat 75 [ go ]
       <value value="4"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="grass-regrowth-time">
-      <value value="40"/>
+      <value value="30"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="with-nulls" repetitions="10" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="10000"/>
+    <exitCondition>not any? wolves or not any? sheep</exitCondition>
+    <metric>count sheep</metric>
+    <metric>count wolves</metric>
+    <metric>grass</metric>
+    <metric>s-to-g</metric>
+    <metric>s-to-s</metric>
+    <metric>s-to-w</metric>
+    <metric>w-to-g</metric>
+    <metric>w-to-s</metric>
+    <metric>w-to-w</metric>
+    <metric>null-s-to-g</metric>
+    <metric>null-s-to-s</metric>
+    <metric>null-s-to-w</metric>
+    <metric>null-w-to-g</metric>
+    <metric>null-w-to-s</metric>
+    <metric>null-w-to-w</metric>
+    <enumeratedValueSet variable="wolf-gain-from-food">
+      <value value="20"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="grass?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="reproduce-%">
+      <value value="2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fov">
+      <value value="120"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-wolves">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="vision">
+      <value value="3"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-sheep">
+      <value value="100"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="include-null?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-gain-from-food">
+      <value value="4"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="mut-rate">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="grass-regrowth-time">
+      <value value="30"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="with-nulls-big" repetitions="100" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="10000"/>
+    <exitCondition>not any? wolves or not any? sheep</exitCondition>
+    <metric>count sheep</metric>
+    <metric>count wolves</metric>
+    <metric>grass</metric>
+    <metric>s-to-g</metric>
+    <metric>s-to-s</metric>
+    <metric>s-to-w</metric>
+    <metric>w-to-g</metric>
+    <metric>w-to-s</metric>
+    <metric>w-to-w</metric>
+    <metric>null-s-to-g</metric>
+    <metric>null-s-to-s</metric>
+    <metric>null-s-to-w</metric>
+    <metric>null-w-to-g</metric>
+    <metric>null-w-to-s</metric>
+    <metric>null-w-to-w</metric>
+    <enumeratedValueSet variable="wolf-gain-from-food">
+      <value value="20"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="grass?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="reproduce-%">
+      <value value="2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fov">
+      <value value="120"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-wolves">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="vision">
+      <value value="3"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-sheep">
+      <value value="100"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="include-null?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-gain-from-food">
+      <value value="4"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="mut-rate">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="grass-regrowth-time">
+      <value value="30"/>
     </enumeratedValueSet>
   </experiment>
 </experiments>
