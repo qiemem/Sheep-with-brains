@@ -1,5 +1,3 @@
-extensions [ cf ]
-
 globals [
   layers
   activation-lambdas
@@ -33,11 +31,11 @@ to setup [ layer-counts activation-names ]
   resize-world 0 max-x (- max-y) max-y
 
   set activation-lambdas map [ act ->
-    (cf:ifelse-value
-      act = "relu" [-> [ nodes -> ask nodes [ set-output relu input ] ] ]
-      act = "sigmoid" [-> [ nodes -> ask nodes [ set-output sigmoid input ] ] ]
-      act = "tanh" [-> [ nodes -> ask nodes [ set-output tanh input ] ] ]
-      act = "softmax" [-> [ nodes ->
+    (ifelse-value
+      act = "relu" [ [ nodes -> ask nodes [ set-output relu input ] ] ]
+      act = "sigmoid" [ [ nodes -> ask nodes [ set-output sigmoid input ] ] ]
+      act = "tanh" [ [ nodes -> ask nodes [ set-output tanh input ] ] ]
+      act = "softmax" [ [ nodes ->
         let total sum [ exp input ] of nodes
         ask nodes [
           set-output (exp input) / total
@@ -225,6 +223,10 @@ end
 
 to-report sigmoid [x]
   report 1 / (1 + exp (- x))
+end
+
+to-report one-hot [ n i ]
+  report n-values n [ j -> ifelse-value i = j [ 1 ] [ 0 ] ]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -680,7 +682,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.0.4-RC1
+NetLogo 6.1.0-RC1
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
