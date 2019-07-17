@@ -97,9 +97,10 @@ to setup
   ]
 
   set grass count patches with [pcolor = green]
-  ; observed approx values for random
-  set smoothed-sheep-efficiency 0.95
-  set smoothed-wolf-efficiency 0.75
+
+  set smoothed-sheep-efficiency safe-div (count sheep with [ pcolor = green ]) (count sheep * grass / count patches)
+  set smoothed-wolf-efficiency safe-div (count wolves with [ any? sheep-here ]) (count wolves * count sheep / count patches)
+
   reset-ticks
 end
 
@@ -107,9 +108,10 @@ to go
   set sheep-efficiency 0
   set wolf-efficiency 0
   if not any? turtles [ stop ]
+  let num-eligible-sheep count sheep
   ask sheep [
     ifelse sheep-random? [
-      move
+      move-random
     ] [
       go-brain
     ]
@@ -118,9 +120,12 @@ to go
     death
     if energy > sheep-threshold [ reproduce ]
   ]
+  set sheep-efficiency safe-div sheep-efficiency num-eligible-sheep
+
+  let num-eligible-wolves count wolves
   ask wolves [
     ifelse wolves-random? [
-      move
+      move-random
     ] [
       go-brain
     ]
@@ -129,10 +134,12 @@ to go
     death
     if energy > wolf-threshold [ reproduce ]
   ]
+  set wolf-efficiency safe-div wolf-efficiency num-eligible-wolves
+
   ask patches [ grow-grass ]
-  ask turtles [ ls:display brain ]
   set smoothed-sheep-efficiency 0.99 * smoothed-sheep-efficiency + 0.01 * sheep-efficiency
   set smoothed-wolf-efficiency 0.99 * smoothed-wolf-efficiency + 0.01 * wolf-efficiency
+  ask turtles [ ls:display brain ]
   tick
 end
 
@@ -189,16 +196,15 @@ to-report apply-brain [ in ]
   report [ apply-reals inputs ] ls:of brain
 end
 
-to move  ;; turtle procedure
-  rt random 50
-  lt random 50
+to move-random
+  rt one-of [-30 0 30]
   fd 1
 end
 
 to eat-grass  ;; sheep procedure
   ;; sheep eat grass, turn the patch brown
   if pcolor = green [
-    set sheep-efficiency sheep-efficiency + count patches / (grass * count sheep)
+    set sheep-efficiency sheep-efficiency + count patches / grass
     set pcolor brown
     set grass grass - 1
     set energy energy + sheep-gain-from-food  ;; sheep gain energy by eating
@@ -236,13 +242,12 @@ end
 
 
 to catch-sheep  ;; wolf procedure
-  let prey one-of sheep-here                    ;; grab a random sheep
+  let prey one-of sheep-here
   if prey != nobody [
-    set wolf-efficiency wolf-efficiency + count patches / (count sheep * count wolves)
+    set wolf-efficiency wolf-efficiency + count patches / count sheep
     set energy energy + [ energy ] of prey
     ask prey [ kill ]
-;   set energy energy + wolf-gain-from-food
-  ] ;; get energy from eating
+  ]
 end
 
 to death  ;; turtle procedure
@@ -400,9 +405,9 @@ end
 ; See Info tab for full copyright and license.
 @#$#@#$#@
 GRAPHICS-WINDOW
-720
+710
 10
-1238
+1228
 529
 -1
 -1
@@ -427,24 +432,24 @@ ticks
 30.0
 
 SLIDER
+0
 10
-10
-185
+175
 43
 initial-number-sheep
 initial-number-sheep
 0
 250
-150.0
+180.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-10
+0
 80
-185
+175
 113
 sheep-gain-from-food
 sheep-gain-from-food
@@ -457,24 +462,24 @@ NIL
 HORIZONTAL
 
 SLIDER
-185
+175
 10
-360
+350
 43
 initial-number-wolves
 initial-number-wolves
 0
 250
-40.0
+100.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-185
+175
 80
-360
+350
 113
 grass-regrowth-time
 grass-regrowth-time
@@ -487,9 +492,9 @@ NIL
 HORIZONTAL
 
 BUTTON
-10
+190
 45
-79
+259
 78
 setup
 setup
@@ -504,9 +509,9 @@ NIL
 1
 
 BUTTON
-92
+272
 45
-159
+339
 78
 go
 go
@@ -521,9 +526,9 @@ NIL
 0
 
 PLOT
-10
+0
 220
-360
+350
 415
 populations
 time
@@ -541,9 +546,9 @@ PENS
 "grass / 4" 1.0 0 -10899396 true "" "plot grass / 4"
 
 SLIDER
-10
+0
 185
-185
+175
 218
 vision
 vision
@@ -556,9 +561,9 @@ NIL
 HORIZONTAL
 
 SLIDER
+175
 185
-185
-360
+350
 218
 fov
 fov
@@ -571,9 +576,9 @@ NIL
 HORIZONTAL
 
 BUTTON
-365
+355
 390
-440
+430
 423
 inspect
 inspect-brain
@@ -588,9 +593,9 @@ NIL
 1
 
 BUTTON
-440
+430
 390
-570
+560
 423
 reset-perspective
 ask turtles [ stop-inspecting self ]\nreset-perspective\nstop-inspecting-dead-agents\nls:hide ls:models\nls:ask ls:models [ set color-links? false ]\nask sheep [ set shape \"sheep\" ]\nask wolves [ set shape \"wolf\" ]
@@ -605,9 +610,9 @@ NIL
 1
 
 PLOT
-365
+355
 10
-715
+705
 205
 sheep-reactions
 NIL
@@ -625,9 +630,9 @@ PENS
 "towards-wolves" 1.0 0 -2674135 true "" "plot s-to-w"
 
 PLOT
-365
+355
 205
-715
+705
 390
 wolf-reactions
 NIL
@@ -645,9 +650,9 @@ PENS
 "towards-wolves" 1.0 0 -2674135 true "" "plot w-to-w"
 
 MONITOR
-295
+285
 305
-352
+342
 350
 sheep
 count sheep
@@ -656,9 +661,9 @@ count sheep
 11
 
 MONITOR
-295
+285
 350
-352
+342
 395
 wolves
 count wolves
@@ -667,9 +672,9 @@ count wolves
 11
 
 SWITCH
-185
+0
 45
-360
+175
 78
 include-null?
 include-null?
@@ -678,9 +683,9 @@ include-null?
 -1000
 
 INPUTBOX
-635
+625
 390
-715
+705
 450
 mut-rate
 0.1
@@ -689,9 +694,9 @@ mut-rate
 Number
 
 BUTTON
-365
+355
 425
-490
+480
 458
 update-subject
 ask turtle-set subject [ __ignore sense ]
@@ -706,9 +711,9 @@ NIL
 1
 
 BUTTON
-490
+480
 425
-555
+545
 458
 drag
 if mouse-down? and mouse-inside? [\n  ask min-one-of turtles [ distancexy mouse-xcor mouse-ycor ] [\n    setxy mouse-xcor mouse-ycor\n  ]\n]\ndisplay
@@ -723,9 +728,9 @@ NIL
 1
 
 PLOT
-10
+0
 415
-360
+350
 610
 smoothed efficiency
 NIL
@@ -742,31 +747,31 @@ PENS
 "wolf" 1.0 0 -2674135 true "" "plot smoothed-wolf-efficiency"
 
 SWITCH
-10
+0
 150
-185
+175
 183
 sheep-random?
 sheep-random?
-1
+0
 1
 -1000
 
 SWITCH
-185
+175
 150
-360
+350
 183
 wolves-random?
 wolves-random?
-1
+0
 1
 -1000
 
 MONITOR
-300
+290
 500
-357
+347
 545
 sheep
 smoothed-sheep-efficiency
@@ -775,9 +780,9 @@ smoothed-sheep-efficiency
 11
 
 MONITOR
-300
+290
 545
-357
+347
 590
 wolves
 smoothed-wolf-efficiency
@@ -786,9 +791,9 @@ smoothed-wolf-efficiency
 11
 
 SLIDER
-10
+0
 115
-185
+175
 148
 sheep-threshold
 sheep-threshold
@@ -801,9 +806,9 @@ NIL
 HORIZONTAL
 
 SLIDER
-185
+175
 115
-360
+350
 148
 wolf-threshold
 wolf-threshold
@@ -1221,7 +1226,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.0-RC2
+NetLogo 6.1.0
 @#$#@#$#@
 setup
 set grass? true
