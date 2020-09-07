@@ -176,7 +176,6 @@ to-report make-brain
     set b first brain-pool
     set brain-pool but-first brain-pool
   ]
-  ls:set-name brain (word "Brain of " self)
   (ls:ask b [ ls ->
     set color-links? false
     setup ls ["relu" "softmax"]
@@ -188,6 +187,7 @@ end
 
 to setup-brain
   set brain make-brain
+  ls:set-name brain (word "Brain of " self)
   if include-null? [
     set null-brain make-brain
   ]
@@ -465,7 +465,7 @@ initial-number-sheep
 initial-number-sheep
 0
 250
-150.0
+100.0
 1
 1
 NIL
@@ -495,7 +495,7 @@ initial-number-wolves
 initial-number-wolves
 0
 250
-50.0
+100.0
 1
 1
 NIL
@@ -1268,7 +1268,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.0
+NetLogo 6.1.1
 @#$#@#$#@
 setup
 set grass? true
