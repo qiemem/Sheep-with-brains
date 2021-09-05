@@ -36,6 +36,7 @@ breed [wolves wolf]
 turtles-own [
   energy
   brain
+  action
   null-brain
 ]
 patches-own [countdown]
@@ -134,35 +135,31 @@ to go
   set sheep-efficiency 0
   set wolf-efficiency 0
   if not any? turtles [ stop ]
+
   let num-eligible-sheep count sheep
-  ask sheep [
-    ifelse sheep-random? [
-      move-random
+  let num-eligible-wolves count wolves
+
+  ask turtles [
+    ifelse breed = sheep [
+      ifelse sheep-random? [ pick-random ] [ pick-brain ]
+      move
+      set energy energy - 1
+      eat-grass
     ] [
-      go-brain
+      ifelse wolves-random? [ pick-random ] [ pick-brain ]
+      move
+      set energy energy - 1
+      catch-sheep
     ]
-    set energy energy - 1
-    eat-grass
     death
-    if energy > sheep-threshold [ reproduce ]
   ]
   set sheep-efficiency safe-div sheep-efficiency num-eligible-sheep
-
-  let num-eligible-wolves count wolves
-  ask wolves [
-    ifelse wolves-random? [
-      move-random
-    ] [
-      go-brain
-    ]
-    set energy energy - 1
-    catch-sheep
-    death
-    if energy > wolf-threshold [ reproduce ]
-  ]
   set wolf-efficiency safe-div wolf-efficiency num-eligible-wolves
 
+  ask sheep [ if energy > sheep-threshold [ reproduce ] ]
+  ask wolves [ if energy > wolf-threshold [ reproduce ] ]
   ask patches [ grow-grass ]
+
   set smoothed-sheep-efficiency 0.99 * smoothed-sheep-efficiency + 0.01 * sheep-efficiency
   set smoothed-wolf-efficiency 0.99 * smoothed-wolf-efficiency + 0.01 * wolf-efficiency
   tick
@@ -200,7 +197,7 @@ to-report in-vision-at [ agentset angle ]
   report result
 end
 
-to go-brain
+to pick-brain
   let r random-float 1
   let i -1
   let probs sense
@@ -208,7 +205,15 @@ to go-brain
     set i i + 1
     set r r - item i probs
   ]
-  run item i outputs
+  set action item i outputs
+end
+
+to pick-random
+  set action one-of outputs
+end
+
+to move
+  run action
   fd 1
 end
 
@@ -219,11 +224,6 @@ end
 to-report apply-brain [ in ]
   ls:let inputs in
   report [ apply-reals inputs ] ls:of brain
-end
-
-to move-random
-  rt one-of [-30 0 30]
-  fd 1
 end
 
 to eat-grass  ;; sheep procedure
@@ -703,7 +703,7 @@ SWITCH
 78
 include-null?
 include-null?
-1
+0
 1
 -1000
 
@@ -1268,7 +1268,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.1
+NetLogo 6.2.0
 @#$#@#$#@
 setup
 set grass? true
