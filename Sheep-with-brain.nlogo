@@ -28,6 +28,8 @@ globals [
   wolf-efficiency
   smoothed-sheep-efficiency
   smoothed-wolf-efficiency
+
+  drag-target
 ]
 
 ;; Sheep and wolves are both breeds of turtle.
@@ -64,12 +66,13 @@ to setup
 
   set layers (sentence (length inputs)  (length inputs) (length outputs))
 
-  ask patches [ set pcolor green ]
   ask patches [
-    set pcolor one-of [green brown]
-    if-else pcolor = green
-      [ set countdown grass-regrowth-time ]
-    [ set countdown random grass-regrowth-time ] ;; initialize grass grow clocks randomly for brown patches
+    set pcolor brown
+    set countdown random grass-regrowth-time ;; initialize grass grow clocks randomly for brown patches
+  ]
+  ask n-of (initial-grass-density * count patches) patches [
+    set pcolor green
+    set countdown grass-regrowth-time
   ]
   set-default-shape sheep "sheep"
   create-sheep initial-number-sheep  ;; create the sheep, then initialize their variables
@@ -100,6 +103,8 @@ to setup
 
   set smoothed-sheep-efficiency safe-div (count sheep with [ pcolor = green ]) (count sheep * grass / count patches)
   set smoothed-wolf-efficiency safe-div (count wolves with [ any? sheep-here ]) (count wolves * count sheep / count patches)
+
+  set drag-target nobody
 
   reset-ticks
 end
@@ -144,7 +149,7 @@ to go
     set energy energy - 1
     eat-grass
     death
-    if energy > sheep-threshold [ reproduce ]
+    if energy > sheep-threshold [ reproduce sheep-threshold ]
   ]
   set sheep-efficiency safe-div sheep-efficiency num-eligible-sheep
 
@@ -158,7 +163,7 @@ to go
     set energy energy - 1
     catch-sheep
     death
-    if energy > wolf-threshold [ reproduce ]
+    if energy > wolf-threshold [ reproduce wolf-threshold ]
   ]
   set wolf-efficiency safe-div wolf-efficiency num-eligible-wolves
 
@@ -236,12 +241,14 @@ to eat-grass  ;; sheep procedure
   ]
 end
 
-to reproduce
-  set energy (energy / 2)
+to reproduce [ threshold ]
+  let baby-energy round (threshold * newborn-energy)
+  set energy energy - baby-energy
   ls:let child-weights map [ w -> random-normal w mut-rate ] [get-weights] ls:of brain
   ls:let child-biases map [ b -> random-normal b mut-rate ] [get-biases] ls:of brain
   let child nobody
   hatch 1 [
+    set energy baby-energy
     setup-brain
     ls:ask brain [
       set-weights child-weights
@@ -270,7 +277,7 @@ to catch-sheep  ;; wolf procedure
   let prey one-of sheep-here
   if prey != nobody [
     set wolf-efficiency wolf-efficiency + count patches / count sheep
-    set energy energy + [ energy ] of prey
+    set energy energy + round (wolf-gain-from-food * [ energy ] of prey)
     ask prey [ kill ]
   ]
 end
@@ -425,6 +432,21 @@ to inspect-brain
   ]
 end
 
+to drag
+  ifelse mouse-down? and mouse-inside? [
+    if not is-turtle? drag-target [
+      set drag-target min-one-of turtles [ distancexy mouse-xcor mouse-ycor ]
+    ]
+    ask drag-target [
+      facexy mouse-xcor mouse-ycor
+      ask drag-target [ setxy mouse-xcor mouse-ycor ]
+    ]
+  ] [
+    set drag-target nobody
+  ]
+  display
+end
+
 
 ; Copyright 1997 Uri Wilensky.
 ; See Info tab for full copyright and license.
@@ -465,7 +487,7 @@ initial-number-sheep
 initial-number-sheep
 0
 250
-100.0
+50.0
 1
 1
 NIL
@@ -473,9 +495,9 @@ HORIZONTAL
 
 SLIDER
 0
-80
+115
 175
-113
+148
 sheep-gain-from-food
 sheep-gain-from-food
 0.0
@@ -495,17 +517,17 @@ initial-number-wolves
 initial-number-wolves
 0
 250
-100.0
+50.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
+0
+255
 175
-80
-350
-113
+288
 grass-regrowth-time
 grass-regrowth-time
 0
@@ -517,10 +539,10 @@ NIL
 HORIZONTAL
 
 BUTTON
-190
-45
-259
-78
+0
+80
+69
+113
 setup
 setup
 NIL
@@ -534,10 +556,10 @@ NIL
 1
 
 BUTTON
-272
-45
-339
-78
+70
+80
+137
+113
 go
 go
 T
@@ -552,9 +574,9 @@ NIL
 
 PLOT
 0
-220
+315
 350
-415
+510
 populations
 time
 pop.
@@ -572,9 +594,9 @@ PENS
 
 SLIDER
 0
-185
+220
 175
-218
+253
 vision
 vision
 0
@@ -587,9 +609,9 @@ HORIZONTAL
 
 SLIDER
 175
-185
+220
 350
-218
+253
 fov
 fov
 0
@@ -602,9 +624,9 @@ HORIZONTAL
 
 BUTTON
 355
-390
+10
 430
-423
+43
 inspect
 inspect-brain
 NIL
@@ -619,9 +641,9 @@ NIL
 
 BUTTON
 430
-390
+10
 560
-423
+43
 reset-perspective
 ask turtles [ stop-inspecting self ]\nreset-perspective\nstop-inspecting-dead-agents\nls:hide ls:models\nls:ask ls:models [ set color-links? false ]\nask sheep [ set shape \"sheep\" ]\nask wolves [ set shape \"wolf\" ]
 NIL
@@ -635,10 +657,10 @@ NIL
 1
 
 PLOT
-355
-10
-705
-205
+350
+315
+700
+510
 sheep-reactions
 NIL
 NIL
@@ -655,10 +677,10 @@ PENS
 "towards-wolves" 1.0 0 -2674135 true "" "plot s-to-w"
 
 PLOT
-355
-205
+350
+510
+700
 705
-390
 wolf-reactions
 NIL
 NIL
@@ -676,9 +698,9 @@ PENS
 
 MONITOR
 285
-305
+400
 342
-350
+445
 sheep
 count sheep
 17
@@ -687,9 +709,9 @@ count sheep
 
 MONITOR
 285
-350
+445
 342
-395
+490
 wolves
 count wolves
 17
@@ -697,9 +719,9 @@ count wolves
 11
 
 SWITCH
-0
-45
 175
+45
+350
 78
 include-null?
 include-null?
@@ -708,10 +730,10 @@ include-null?
 -1000
 
 INPUTBOX
-625
-390
-705
-450
+175
+255
+255
+315
 mut-rate
 0.1
 1
@@ -720,9 +742,9 @@ Number
 
 BUTTON
 355
-425
+45
 480
-458
+78
 update-subject
 ask turtle-set subject [ __ignore sense ]
 T
@@ -737,9 +759,9 @@ NIL
 
 BUTTON
 480
-425
+45
 545
-458
+78
 drag
 if mouse-down? and mouse-inside? [\n  ask min-one-of turtles [ distancexy mouse-xcor mouse-ycor ] [\n    setxy mouse-xcor mouse-ycor\n  ]\n]\ndisplay
 T
@@ -754,9 +776,9 @@ NIL
 
 PLOT
 0
-415
+510
 350
-610
+705
 smoothed efficiency
 NIL
 NIL
@@ -773,9 +795,9 @@ PENS
 
 SWITCH
 0
-150
+185
 175
-183
+218
 sheep-random?
 sheep-random?
 1
@@ -784,9 +806,9 @@ sheep-random?
 
 SWITCH
 175
-150
+185
 350
-183
+218
 wolves-random?
 wolves-random?
 1
@@ -795,9 +817,9 @@ wolves-random?
 
 MONITOR
 290
-500
+595
 347
-545
+640
 sheep
 smoothed-sheep-efficiency
 3
@@ -806,9 +828,9 @@ smoothed-sheep-efficiency
 
 MONITOR
 290
-545
+640
 347
-590
+685
 wolves
 smoothed-wolf-efficiency
 3
@@ -817,14 +839,14 @@ smoothed-wolf-efficiency
 
 SLIDER
 0
-115
+150
 175
-148
+183
 sheep-threshold
 sheep-threshold
 0
 200
-30.0
+70.0
 10
 1
 NIL
@@ -832,14 +854,14 @@ HORIZONTAL
 
 SLIDER
 175
-115
+150
 350
-148
+183
 wolf-threshold
 wolf-threshold
 0
 200
-60.0
+70.0
 10
 1
 NIL
@@ -847,9 +869,9 @@ HORIZONTAL
 
 BUTTON
 400
-510
+130
 512
-543
+163
 NIL
 sample-effs\n
 NIL
@@ -861,6 +883,51 @@ NIL
 NIL
 NIL
 1
+
+SLIDER
+0
+45
+175
+78
+initial-grass-density
+initial-grass-density
+0
+1
+0.35
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+175
+80
+350
+113
+newborn-energy
+newborn-energy
+0
+1
+0.1
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+175
+115
+350
+148
+wolf-gain-from-food
+wolf-gain-from-food
+0
+1
+0.7
+0.1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1268,7 +1335,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.1
+NetLogo 6.2.2
 @#$#@#$#@
 setup
 set grass? true
