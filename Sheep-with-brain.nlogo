@@ -1,8 +1,32 @@
-extensions [ ls rnd ]
+extensions [ ls rnd table ]
 
 
 globals [
   grass
+
+  sheep-efficiency
+  wolf-efficiency
+  sheep-escape-efficiency
+
+  sheep-eaten
+  grass-eaten
+
+  sheep-born
+  wolves-born
+
+  patches-with-sheep
+
+  wolf-intake
+  wolf-intake-attempts
+  sheep-intake
+  sheep-intake-attempts
+
+  avg-grass
+  avg-patches-with-sheep
+
+  smoothed-values
+
+
   inputs
   outputs
   brain-pool
@@ -24,11 +48,6 @@ globals [
   null-wolves-towards-sheep
   null-wolves-towards-wolves
 
-  sheep-efficiency
-  wolf-efficiency
-  smoothed-sheep-efficiency
-  smoothed-wolf-efficiency
-
   drag-target
 ]
 
@@ -45,6 +64,13 @@ patches-own [countdown]
 to setup
   clear-all
   set brain-pool ls:models
+
+  set smoothed-values table:make
+
+  set sheep-intake []
+  set wolf-intake []
+  set wolf-intake-attempts []
+  set sheep-intake-attempts []
 
   set inputs (list
     [ -> binary any? (in-vision-at patches (- fov / 3)) with [ pcolor = green ] ]
@@ -101,9 +127,6 @@ to setup
 
   set grass count patches with [pcolor = green]
 
-  set smoothed-sheep-efficiency safe-div (count sheep with [ pcolor = green ]) (count sheep * grass / count patches)
-  set smoothed-wolf-efficiency safe-div (count wolves with [ any? sheep-here ]) (count wolves * count sheep / count patches)
-
   set drag-target nobody
 
   reset-ticks
@@ -118,6 +141,8 @@ to sample-effs
   let spop []
   let gpop []
 
+  let seff-escape []
+
   while [ ticks < n and any? turtles ] [
     set spop lput count sheep spop
     set wpop lput count wolves wpop
@@ -125,21 +150,32 @@ to sample-effs
     go
     set weff lput wolf-efficiency weff
     set seff lput sheep-efficiency seff
+    set seff-escape lput sheep-escape-efficiency seff-escape
   ]
   let w-tick-mean mean weff
   let s-tick-mean mean seff
   let w-indiv-mean (sum (map * weff wpop)) / (sum wpop)
   let s-indiv-mean (sum (map * seff spop)) / (sum spop)
-  print (word "Sheep:  tick-mean=" (precision s-tick-mean 2) " indiv-mean=" (precision s-indiv-mean 2) " pop-std=" (precision standard-deviation spop 2) " fov=" fov " vision=" vision)
-  print (word "Wolves: tick-mean=" (precision w-tick-mean 2) " indiv-mean=" (precision w-indiv-mean 2) " pop-std=" (precision standard-deviation wpop 2) " fov=" fov " vision=" vision)
-  print (word "Grass:  pop-std=" (precision standard-deviation gpop 2))
+
+  let s-esc-tick-mean mean seff-escape
+  let s-esc-indiv-mean safe-div (sum (map * seff-escape spop)) (sum spop)
+
+  print (word "Sheep:   tick-mean=" (precision s-tick-mean 2) " indiv-mean=" (precision s-indiv-mean 2) " pop-std=" (precision standard-deviation spop 2) " fov=" fov " vision=" vision)
+  print (word "Sheepesc tick-mean=" (precision s-esc-tick-mean 2) " indiv-mean=" (precision s-esc-indiv-mean 2))
+  print (word "Wolves:  tick-mean=" (precision w-tick-mean 2) " indiv-mean=" (precision w-indiv-mean 2) " pop-std=" (precision standard-deviation wpop 2) " fov=" fov " vision=" vision)
+  print (word "Grass:   pop-std=" (precision standard-deviation gpop 2))
 end
 
 to go
+  if not any? turtles [ stop ]
   set sheep-efficiency 0
   set wolf-efficiency 0
-  if not any? turtles [ stop ]
+  set sheep-escape-efficiency 0
   let num-eligible-sheep count sheep
+  let available-grass grass
+  set sheep-born 0
+  set wolves-born 0
+  set avg-grass 0
   ask sheep [
     ifelse sheep-random? [
       move-random
@@ -149,11 +185,22 @@ to go
     set energy energy - 1
     eat-grass
     death
-    if energy > sheep-threshold [ reproduce sheep-threshold ]
+    if energy > sheep-threshold [
+      reproduce sheep-threshold
+      set sheep-born sheep-born + 1
+    ]
   ]
+  set avg-grass safe-div avg-grass num-eligible-sheep
+  set grass-eaten available-grass - grass
   set sheep-efficiency safe-div sheep-efficiency num-eligible-sheep
 
   let num-eligible-wolves count wolves
+  set patches-with-sheep count patches with [ any? sheep-here ]
+  let available-sheep count sheep
+  let avail-sheep-patches count patches with [ any? sheep-here ]
+  set avg-patches-with-sheep 0
+  set sheep-eaten 0
+
   ask wolves [
     ifelse wolves-random? [
       move-random
@@ -163,13 +210,18 @@ to go
     set energy energy - 1
     catch-sheep
     death
-    if energy > wolf-threshold [ reproduce wolf-threshold ]
+    if energy > wolf-threshold [
+      reproduce wolf-threshold
+      set wolves-born wolves-born + 1
+    ]
   ]
+  let sheep-patches count patches with [ any? sheep-here ]
+  set avg-patches-with-sheep safe-div avg-patches-with-sheep num-eligible-wolves
+
   set wolf-efficiency safe-div wolf-efficiency num-eligible-wolves
+  set sheep-escape-efficiency safe-div sheep-escape-efficiency num-eligible-wolves
 
   ask patches [ grow-grass ]
-  set smoothed-sheep-efficiency 0.99 * smoothed-sheep-efficiency + 0.01 * sheep-efficiency
-  set smoothed-wolf-efficiency 0.99 * smoothed-wolf-efficiency + 0.01 * wolf-efficiency
   tick
 end
 
@@ -232,7 +284,10 @@ to move-random
 end
 
 to eat-grass  ;; sheep procedure
-  ;; sheep eat grass, turn the patch brown
+              ;; sheep eat grass, turn the patch brown
+  set sheep-intake-attempts item+ grass sheep-intake-attempts 1
+  set sheep-intake item+ grass sheep-intake (ifelse-value pcolor = green [ 1 ] [ 0 ])
+  set avg-grass avg-grass + grass
   if pcolor = green [
     set sheep-efficiency sheep-efficiency + count patches / grass
     set pcolor brown
@@ -274,11 +329,22 @@ end
 
 
 to catch-sheep  ;; wolf procedure
+  set wolf-intake-attempts item+ patches-with-sheep wolf-intake-attempts 1
   let prey one-of sheep-here
-  if prey != nobody [
-    set wolf-efficiency wolf-efficiency + count patches / count sheep
+  set wolf-intake item+ patches-with-sheep wolf-intake (ifelse-value prey = nobody [ 0 ] [ 1 ])
+
+  set avg-patches-with-sheep avg-patches-with-sheep + patches-with-sheep
+  let prob-of-eating patches-with-sheep / count patches
+  ifelse prey != nobody [
+    set sheep-eaten sheep-eaten + 1
+    set wolf-efficiency wolf-efficiency + 1 / prob-of-eating
     set energy energy + round (wolf-gain-from-food * [ energy ] of prey)
     ask prey [ kill ]
+    if not any? sheep-here [
+      set patches-with-sheep patches-with-sheep - 1
+    ]
+  ] [
+    set sheep-escape-efficiency sheep-escape-efficiency + 1 / (1 - prob-of-eating)
   ]
 end
 
@@ -300,13 +366,13 @@ end
 
 
 to grow-grass  ;; patch procedure
-  ;; countdown on brown patches: if reach 0, grow some grass
+               ;; countdown on brown patches: if reach 0, grow some grass
   if pcolor = brown [
     ifelse countdown <= 0
       [ set pcolor green
         set grass grass + 1
         set countdown grass-regrowth-time ]
-      [ set countdown countdown - 1 ]
+    [ set countdown countdown - 1 ]
   ]
 end
 
@@ -370,6 +436,27 @@ end
 to-report safe-div [ n d ]
   if d = 0 [ report 0 ]
   report n / d
+end
+
+to-report item+ [ i lst delta ]
+  if length lst < i + 1 [
+    set lst sentence lst n-values (i - length lst + 1) [ 0 ]
+  ]
+  report replace-item i lst (delta + item i lst)
+end
+
+to-report smoothed [ variable c ]
+  report smoothed-val variable (runresult variable) 1 c
+end
+
+to-report smoothed-val [ name cur-value poles c ]
+  foreach range poles [ i ->
+    let var (word name "-" (1 + i))
+    let last-value table:get-or-default smoothed-values var cur-value
+    set cur-value last-value + c * (cur-value - last-value)
+    table:put smoothed-values var cur-value
+  ]
+  report cur-value
 end
 
 to-report s-to-g
@@ -778,7 +865,7 @@ PLOT
 0
 510
 350
-705
+735
 smoothed efficiency
 NIL
 NIL
@@ -790,8 +877,9 @@ true
 true
 "" ""
 PENS
-"sheep" 1.0 0 -13345367 true "" "plot smoothed-sheep-efficiency"
-"wolf" 1.0 0 -2674135 true "" "plot smoothed-wolf-efficiency"
+"sheep" 1.0 0 -13345367 true "" "plot smoothed-val \"seff\" sheep-efficiency 6 0.1"
+"wolf" 1.0 0 -2674135 true "" "plot smoothed-val \"weff\" wolf-efficiency 6 0.1"
+"escape" 1.0 0 -11221820 true "" "plot smoothed-val \"escape\" sheep-escape-efficiency 6 0.1"
 
 SWITCH
 0
@@ -816,23 +904,23 @@ wolves-random?
 -1000
 
 MONITOR
-290
-595
-347
-640
+285
+585
+342
+630
 sheep
-smoothed-sheep-efficiency
+table:get smoothed-values \"seff-6\"
 3
 1
 11
 
 MONITOR
-290
-640
-347
-685
+285
+675
+342
+720
 wolves
-smoothed-wolf-efficiency
+table:get smoothed-values \"weff-6\"
 3
 1
 11
@@ -928,6 +1016,17 @@ wolf-gain-from-food
 1
 NIL
 HORIZONTAL
+
+MONITOR
+285
+630
+342
+675
+escape
+table:get smoothed-values \"escape-6\"
+3
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
