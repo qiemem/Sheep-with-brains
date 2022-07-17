@@ -1,4 +1,4 @@
-extensions [ ls rnd table ]
+extensions [ ls rnd table profiler ]
 
 
 globals [
@@ -72,16 +72,27 @@ to setup
   set wolf-intake-attempts []
   set sheep-intake-attempts []
 
-  set inputs (list
-    [ -> binary any? (in-vision-at patches (- fov / 3)) with [ pcolor = green ] ]
-    [ -> binary any? (in-vision-at patches 0) with [ pcolor = green ] ]
-    [ -> binary any? (in-vision-at patches (fov / 3)) with [ pcolor = green ] ]
-    [ -> binary any? other (in-vision-at sheep (- fov / 3)) ]
-    [ -> binary any? other (in-vision-at sheep 0) ]
-    [ -> binary any? other (in-vision-at sheep (fov / 3)) ]
-    [ -> binary any? other (in-vision-at wolves (- fov / 3)) ]
-    [ -> binary any? other (in-vision-at wolves 0) ]
-    [ -> binary any? other (in-vision-at wolves (fov / 3)) ]
+;  set inputs (list
+;    [ -> binary any? (in-vision-at patches (- fov / 3)) with [ pcolor = green ] ]
+;    [ -> binary any? (in-vision-at patches 0) with [ pcolor = green ] ]
+;    [ -> binary any? (in-vision-at patches (fov / 3)) with [ pcolor = green ] ]
+;    [ -> binary any? other (in-vision-at sheep (- fov / 3)) ]
+;    [ -> binary any? other (in-vision-at sheep 0) ]
+  ;    [ -> binary any? other (in-vision-at sheep (fov / 3)) ]
+  ;    [ -> binary any? other (in-vision-at wolves (- fov / 3)) ]
+  ;    [ -> binary any? other (in-vision-at wolves 0) ]
+  ;    [ -> binary any? other (in-vision-at wolves (fov / 3)) ]
+  ;  )
+  set inputs (reduce sentence
+    (map [ min-dist ->
+      reduce sentence map [ angle ->
+        (list
+          [ -> binary any? (in-vision-at patches angle min-dist (min-dist + 3)) with [ pcolor = green ] ]
+          [ -> binary any? other (in-vision-at sheep angle min-dist (min-dist + 3)) ]
+          [ -> binary any? other (in-vision-at wolves angle min-dist (min-dist + 3)) ]
+        )
+      ] (range -30 31 30)
+    ] range 1)
   )
 
   set outputs (list
@@ -235,8 +246,9 @@ to-report make-brain
   ]
   (ls:ask b [ ls ->
     set color-links? false
-    setup ls ["relu" "softmax"]
+    setup ls ["sigmoid" "softmax"]
     randomize-weights
+    ask item 2 layers [ set-bias 0 ]
   ] layers)
   report b
 end
@@ -250,9 +262,9 @@ to setup-brain
   ]
 end
 
-to-report in-vision-at [ agentset angle ]
+to-report in-vision-at [ agentset angle min-dist max-dist ]
   rt angle
-  let result agentset in-cone vision (fov / 3)
+  let result (agentset in-cone max-dist (fov / 3)) with [ distance myself > min-dist ]
   lt angle
   report result
 end
@@ -299,15 +311,25 @@ end
 to reproduce [ threshold ]
   let baby-energy round (threshold * newborn-energy)
   set energy energy - baby-energy
-  ls:let child-weights map [ w -> random-normal w mut-rate ] [get-weights] ls:of brain
-  ls:let child-biases map [ b -> random-normal b mut-rate ] [get-biases] ls:of brain
+;  ls:let child-weights map [ w -> random-normal w mut-rate ] [get-weights] ls:of brain
+;  ls:let child-biases map [ b -> random-normal b mut-rate ] [get-biases] ls:of brain
+  let weights [ get-layer-weights 1 ] ls:of brain
+  if crossover? [
+    let parent-b-weights [ [ get-layer-weights 1 ] ls:of brain ] of min-one-of other breed [ distance myself ]
+    let crossover-index random length weights
+    set weights (sentence (sublist weights 0 crossover-index) (sublist parent-b-weights crossover-index length parent-b-weights))
+  ]
+  ls:let child-weights map [ ws -> map [ w -> random-normal w mut-rate ] ws ] weights
   let child nobody
   hatch 1 [
     set energy baby-energy
     setup-brain
+;    ls:ask brain [
+;      set-weights child-weights
+;      set-biases child-biases
+;    ]
     ls:ask brain [
-      set-weights child-weights
-      set-biases child-biases
+      set-layer-weights 1 child-weights
     ]
     rt random-float 360 fd 1
     set child self
@@ -409,6 +431,7 @@ to delete-stats
 end
 
 to change-stats [ scale ]
+  stop
   if is-a-sheep? self [
     set sheep-towards-grass sheep-towards-grass + scale * towards-type 0 brain
     set sheep-towards-sheep sheep-towards-sheep + scale * towards-type 3 brain
@@ -822,7 +845,7 @@ INPUTBOX
 255
 315
 mut-rate
-0.1
+1.0
 1
 0
 Number
@@ -1027,6 +1050,17 @@ table:get smoothed-values \"escape-6\"
 3
 1
 11
+
+SWITCH
+255
+255
+387
+288
+crossover?
+crossover?
+0
+1
+-1000
 
 @#$#@#$#@
 ## WHAT IS IT?

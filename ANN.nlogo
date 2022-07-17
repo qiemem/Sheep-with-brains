@@ -157,6 +157,23 @@ to-report get-weights
   report map [ l -> [weight] of l ] sort links
 end
 
+to-report get-layer-weights [ i ]
+  report map [ n ->
+    [ lput bias (map [ l -> [ weight ] of l ] sort my-links) ] of n
+  ] sort item i layers
+end
+
+to set-layer-weights [ i weights ]
+  (foreach (sort item i layers) weights [ [ node ws ] ->
+    ask node [
+      set-bias last ws
+      (foreach (sort my-links) (but-last ws) [ [ l w ] ->
+        ask l [ set-weight w ]
+      ])
+    ]
+  ])
+end
+
 to-report get-biases
   report map [ t -> [bias] of t ] sort turtles
 end
