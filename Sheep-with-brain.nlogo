@@ -26,11 +26,10 @@ globals [
 
   smoothed-values
 
-
-  inputs
+;  inputs
   outputs
   brain-pool
-  layers
+;  layers
 
   inspectable-brain
 
@@ -56,8 +55,12 @@ breed [sheep a-sheep]  ;; sheep is its own plural, so we use "a-sheep" as the si
 breed [wolves wolf]
 turtles-own [
   energy
-  brain
-  null-brain
+  sheep-processor
+  wolf-processor
+  grass-processor
+  central-processor
+;  brain
+;  null-brain
 ]
 patches-own [countdown]
 
@@ -83,17 +86,17 @@ to setup
   ;    [ -> binary any? other (in-vision-at wolves 0) ]
   ;    [ -> binary any? other (in-vision-at wolves (fov / 3)) ]
   ;  )
-  set inputs (reduce sentence
-    (map [ min-dist ->
-      reduce sentence map [ angle ->
-        (list
-          [ -> binary any? (in-vision-at patches angle min-dist (min-dist + 3)) with [ pcolor = green ] ]
-          [ -> binary any? other (in-vision-at sheep angle min-dist (min-dist + 3)) ]
-          [ -> binary any? other (in-vision-at wolves angle min-dist (min-dist + 3)) ]
-        )
-      ] (range -30 31 30)
-    ] range 1)
-  )
+;  set inputs (reduce sentence
+;    (map [ min-dist ->
+;      reduce sentence map [ angle ->
+;        (list
+;          [ -> binary any? (in-vision-at patches angle min-dist (min-dist + 3)) with [ pcolor = green ] ]
+;          [ -> binary any? other (in-vision-at sheep angle min-dist (min-dist + 3)) ]
+;          [ -> binary any? other (in-vision-at wolves angle min-dist (min-dist + 3)) ]
+;        )
+;      ] (range -30 31 30)
+;    ] range 1)
+;  )
 
   set outputs (list
     [-> lt 30]
@@ -101,7 +104,7 @@ to setup
     [-> rt 30]
   )
 
-  set layers (sentence (length inputs)  (length inputs) (length outputs))
+;  set layers (sentence (length inputs)  (length inputs) (length outputs))
 
   ask patches [
     set pcolor brown
@@ -133,7 +136,7 @@ to setup
 
   ask turtles [
     setup-brain
-    add-stats
+;    add-stats
   ]
 
   set grass count patches with [pcolor = green]
@@ -236,7 +239,7 @@ to go
   tick
 end
 
-to-report make-brain
+to-report make-brain [ layers activations ]
   let b 0
   ifelse empty? brain-pool [
     (ls:create-models 1 "ANN.nlogo" [ id -> ls:hide id set b id ])
@@ -244,22 +247,29 @@ to-report make-brain
     set b first brain-pool
     set brain-pool but-first brain-pool
   ]
-  (ls:ask b [ ls ->
+  (ls:ask b [ [ ls as ] ->
     set color-links? false
-    setup ls ["sigmoid" "softmax"]
+    setup ls as
     randomize-weights
-    ask item 2 layers [ set-bias 0 ]
-  ] layers)
+;    ask item 2 layers [ set-bias 0 ]
+  ] layers activations)
   report b
 end
 
 
 to setup-brain
-  set brain make-brain
-  ls:set-name brain (word "Brain of " self)
-  if include-null? [
-    set null-brain make-brain
-  ]
+  let rep 3
+  let act "sigmoid"
+  set sheep-processor make-brain (list 3 rep rep) (list act act)
+  set wolf-processor make-brain (list 3 rep rep) (list act act)
+  set grass-processor make-brain (list 2 rep rep) (list act act)
+  set central-processor make-brain (list (3 * rep) rep 3) (list act "softmax")
+
+  ls:set-name sheep-processor (word "Sheep processor of " self)
+  ls:set-name wolf-processor (word "Wolf processor of " self)
+  ls:set-name grass-processor (word "Grass processor of " self)
+  ls:set-name central-processor (word "Central processor of " self)
+
 end
 
 to-report in-vision-at [ agentset angle min-dist max-dist ]
@@ -282,12 +292,51 @@ to go-brain
 end
 
 to-report sense
-  report apply-brain (map runresult inputs)
+  let sheep-summary sense-agent-type sheep-processor [
+    (list
+      (([ rel-towards myself ] of myself) / 180)
+      ((rel-towards myself) / 180)
+      (distance myself / vision)
+    )
+  ] of other sheep in-radius vision
+
+  let wolf-summary sense-agent-type wolf-processor [
+    (list
+      (([ rel-towards myself ] of myself) / 180)
+      ((rel-towards myself) / 180)
+      (distance myself / vision)
+    )
+  ] of other wolves in-radius vision
+
+  let grass-summary sense-agent-type grass-processor [
+    (list
+      (([rel-towards myself ] of myself) / 180)
+      (distance myself / vision)
+    )
+  ] of (patches in-radius vision) with [ pcolor = green ]
+  report (ls:report central-processor [ vec -> apply-reals vec ] (sentence sheep-summary wolf-summary grass-summary))
 end
 
-to-report apply-brain [ in ]
-  ls:let inputs in
-  report [ apply-reals inputs ] ls:of brain
+to-report sense-agent-type [ processor inputs ]
+  if empty? inputs [
+    report n-values [ count last layers ] ls:of processor [ 0 ]
+  ]
+  let encodings map [ vec -> (ls:report processor [ v -> apply-reals v ] vec) ] inputs
+  report n-values (length item 0 encodings) [ i ->
+    sum map [ enc -> item i enc ] encodings
+  ]
+end
+
+to-report rel-towards [ agent ]
+  if distance agent = 0 [ report 0 ]
+  let rel-dir towards agent - heading
+  if rel-dir > 180 [
+    report rel-dir - 360
+  ]
+  if rel-dir < -180 [
+    report rel-dir + 360
+  ]
+  report rel-dir
 end
 
 to move-random
@@ -311,15 +360,20 @@ end
 to reproduce [ threshold ]
   let baby-energy round (threshold * newborn-energy)
   set energy energy - baby-energy
-;  ls:let child-weights map [ w -> random-normal w mut-rate ] [get-weights] ls:of brain
-;  ls:let child-biases map [ b -> random-normal b mut-rate ] [get-biases] ls:of brain
-  let weights [ get-layer-weights 1 ] ls:of brain
-  if crossover? [
-    let parent-b-weights [ [ get-layer-weights 1 ] ls:of brain ] of min-one-of other breed [ distance myself ]
-    let crossover-index random length weights
-    set weights (sentence (sublist weights 0 crossover-index) (sublist parent-b-weights crossover-index length parent-b-weights))
-  ]
-  ls:let child-weights map [ ws -> map [ w -> random-normal w mut-rate ] ws ] weights
+  ;  ls:let child-weights map [ w -> random-normal w mut-rate ] [get-weights] ls:of brain
+  ;  ls:let child-biases map [ b -> random-normal b mut-rate ] [get-biases] ls:of brain
+  ls:let sheep-weights map [ w -> random-normal w mut-rate ] [ get-weights ] ls:of sheep-processor
+  ls:let sheep-biases map [ b -> random-normal b mut-rate ] [ get-biases] ls:of sheep-processor
+
+  ls:let wolf-weights map [ w -> random-normal w mut-rate ] [ get-weights ] ls:of wolf-processor
+  ls:let wolf-biases map [ b -> random-normal b mut-rate ] [ get-biases ] ls:of wolf-processor
+
+  ls:let grass-weights map [ w -> random-normal w mut-rate ] [ get-weights ] ls:of grass-processor
+  ls:let grass-biases map [ b -> random-normal b mut-rate ] [ get-biases ] ls:of grass-processor
+
+  ls:let central-weights map [ w -> random-normal w mut-rate ] [ get-weights ] ls:of central-processor
+  ls:let central-biases map [ b -> random-normal b mut-rate ] [ get-biases ] ls:of central-processor
+
   let child nobody
   hatch 1 [
     set energy baby-energy
@@ -328,24 +382,25 @@ to reproduce [ threshold ]
 ;      set-weights child-weights
 ;      set-biases child-biases
 ;    ]
-    ls:ask brain [
-      set-layer-weights 1 child-weights
+    ls:ask sheep-processor [
+      set-weights sheep-weights
+      set-biases sheep-biases
     ]
+    ls:ask wolf-processor [
+      set-weights wolf-weights
+      set-biases wolf-biases
+    ]
+    ls:ask grass-processor [
+      set-weights grass-weights
+      set-biases grass-biases
+    ]
+    ls:ask central-processor [
+      set-weights central-weights
+      set-biases central-biases
+    ]
+
     rt random-float 360 fd 1
     set child self
-  ]
-  if include-null? [
-    ls:let null-weights map [ w -> random-normal w mut-rate ] [get-weights] ls:of null-brain
-    ls:let null-biases map [ b -> random-normal b mut-rate ] [get-biases] ls:of null-brain
-    ask child [
-      ls:ask null-brain [
-        set-weights null-weights
-        set-biases null-biases
-      ]
-    ]
-  ]
-  ask child [
-    add-stats
   ]
 end
 
@@ -377,12 +432,11 @@ to death  ;; turtle procedure
 end
 
 to kill
-  delete-stats
-  ls:set-name brain "In pool"
-  set brain-pool fput brain brain-pool
-  if include-null? [
-    set brain-pool fput null-brain brain-pool
-  ]
+  ls:set-name sheep-processor "In pool"
+  ls:set-name wolf-processor "In pool"
+  ls:set-name grass-processor "In pool"
+  ls:set-name central-processor "In pool"
+  set brain-pool fput sheep-processor fput wolf-processor fput grass-processor fput central-processor brain-pool
   die
 end
 
@@ -422,39 +476,6 @@ to-report turn-right? [ activation ]
   report not first activation and last activation
 end
 
-to add-stats
-  change-stats 1
-end
-
-to delete-stats
-  change-stats -1
-end
-
-to change-stats [ scale ]
-  stop
-  if is-a-sheep? self [
-    set sheep-towards-grass sheep-towards-grass + scale * towards-type 0 brain
-    set sheep-towards-sheep sheep-towards-sheep + scale * towards-type 3 brain
-    set sheep-towards-wolves sheep-towards-wolves + scale * towards-type 6 brain
-  ]
-  if is-wolf? self [
-    set wolves-towards-grass wolves-towards-grass + scale * towards-type 0 brain
-    set wolves-towards-sheep wolves-towards-sheep + scale * towards-type 3 brain
-    set wolves-towards-wolves wolves-towards-wolves + scale * towards-type 6 brain
-  ]
-  if include-null? [
-    if is-a-sheep? self [
-      set null-sheep-towards-grass null-sheep-towards-grass + scale * towards-type 0 null-brain
-      set null-sheep-towards-sheep null-sheep-towards-sheep + scale * towards-type 3 null-brain
-      set null-sheep-towards-wolves null-sheep-towards-wolves + scale * towards-type 6 null-brain
-    ]
-    if is-wolf? self [
-      set null-wolves-towards-grass null-wolves-towards-grass + scale * towards-type 0 null-brain
-      set null-wolves-towards-sheep null-wolves-towards-sheep + scale * towards-type 3 null-brain
-      set null-wolves-towards-wolves null-wolves-towards-wolves + scale * towards-type 6 null-brain
-    ]
-  ]
-end
 
 to-report safe-div [ n d ]
   if d = 0 [ report 0 ]
@@ -527,16 +548,20 @@ to inspect-brain
     ask min-one-of turtles [ distancexy mouse-xcor mouse-ycor ] [
       if subject != self [
         ask turtle-set subject [
-          ls:hide brain
+          ls:hide sheep-processor
+          ls:hide wolf-processor
+          ls:hide grass-processor
+          ls:hide central-processor
         ]
       ]
       set shape "default"
       watch-me
-      ls:ask brain [
+      let brains (list sheep-processor wolf-processor grass-processor central-processor)
+      ls:ask brains [
         set color-links? true
         ask links [ update-link-look ]
       ]
-      ls:show brain
+      ls:show brains
       display
     ]
   ]
@@ -845,7 +870,7 @@ INPUTBOX
 255
 315
 mut-rate
-1.0
+0.1
 1
 0
 Number
