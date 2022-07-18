@@ -83,16 +83,17 @@ to setup
   ;    [ -> binary any? other (in-vision-at wolves 0) ]
   ;    [ -> binary any? other (in-vision-at wolves (fov / 3)) ]
   ;  )
+  let viz-seg-size vision / granularity
   set inputs (reduce sentence
     (map [ min-dist ->
       reduce sentence map [ angle ->
         (list
-          [ -> binary any? (in-vision-at patches angle min-dist (min-dist + 3)) with [ pcolor = green ] ]
-          [ -> binary any? other (in-vision-at sheep angle min-dist (min-dist + 3)) ]
-          [ -> binary any? other (in-vision-at wolves angle min-dist (min-dist + 3)) ]
+          [ -> binary any? (in-vision-at patches angle min-dist (min-dist + viz-seg-size)) with [ pcolor = green ] ]
+          [ -> binary any? other (in-vision-at sheep angle min-dist (min-dist + viz-seg-size)) ]
+          [ -> binary any? other (in-vision-at wolves angle min-dist (min-dist + viz-seg-size)) ]
         )
-      ] (range -30 31 30)
-    ] range 1)
+      ] (range (fov / -2 + 15) (fov / 2 - 15 + 1) 30)
+    ] (range 0 vision viz-seg-size))
   )
 
   set outputs (list
@@ -605,9 +606,9 @@ HORIZONTAL
 
 SLIDER
 0
-115
+150
 175
-148
+183
 sheep-gain-from-food
 sheep-gain-from-food
 0.0
@@ -635,9 +636,9 @@ HORIZONTAL
 
 SLIDER
 0
-255
+115
 175
-288
+148
 grass-regrowth-time
 grass-regrowth-time
 0
@@ -683,10 +684,10 @@ NIL
 0
 
 PLOT
-0
-315
-350
-510
+355
+270
+705
+495
 populations
 time
 pop.
@@ -704,9 +705,9 @@ PENS
 
 SLIDER
 0
-220
+255
 175
-253
+288
 vision
 vision
 0
@@ -719,15 +720,15 @@ HORIZONTAL
 
 SLIDER
 175
-220
+255
 350
-253
+288
 fov
 fov
-0
-180
-90.0
-1
+30
+360
+150.0
+60
 1
 NIL
 HORIZONTAL
@@ -735,7 +736,7 @@ HORIZONTAL
 BUTTON
 355
 10
-430
+415
 43
 inspect
 inspect-brain
@@ -750,9 +751,9 @@ NIL
 1
 
 BUTTON
-430
+415
 10
-560
+535
 43
 reset-perspective
 ask turtles [ stop-inspecting self ]\nreset-perspective\nstop-inspecting-dead-agents\nls:hide ls:models\nls:ask ls:models [ set color-links? false ]\nask sheep [ set shape \"sheep\" ]\nask wolves [ set shape \"wolf\" ]
@@ -767,10 +768,10 @@ NIL
 1
 
 PLOT
+0
+440
 350
-315
-700
-510
+635
 sheep-reactions
 NIL
 NIL
@@ -787,10 +788,10 @@ PENS
 "towards-wolves" 1.0 0 -2674135 true "" "plot s-to-w"
 
 PLOT
+0
+635
 350
-510
-700
-705
+830
 wolf-reactions
 NIL
 NIL
@@ -807,10 +808,10 @@ PENS
 "towards-wolves" 1.0 0 -2674135 true "" "plot w-to-w"
 
 MONITOR
-285
+640
+355
+697
 400
-342
-445
 sheep
 count sheep
 17
@@ -818,10 +819,10 @@ count sheep
 11
 
 MONITOR
-285
+640
+400
+697
 445
-342
-490
 wolves
 count wolves
 17
@@ -840,10 +841,10 @@ include-null?
 -1000
 
 INPUTBOX
-175
-255
-255
-315
+0
+325
+80
+385
 mut-rate
 1.0
 1
@@ -851,10 +852,10 @@ mut-rate
 Number
 
 BUTTON
-355
-45
-480
-78
+535
+10
+650
+43
 update-subject
 ask turtle-set subject [ __ignore sense ]
 T
@@ -868,10 +869,10 @@ NIL
 1
 
 BUTTON
-480
-45
-545
-78
+650
+10
+705
+43
 drag
 if mouse-down? and mouse-inside? [\n  ask min-one-of turtles [ distancexy mouse-xcor mouse-ycor ] [\n    setxy mouse-xcor mouse-ycor\n  ]\n]\ndisplay
 T
@@ -885,10 +886,10 @@ NIL
 1
 
 PLOT
-0
-510
-350
-735
+355
+45
+705
+270
 smoothed efficiency
 NIL
 NIL
@@ -906,9 +907,9 @@ PENS
 
 SWITCH
 0
-185
+220
 175
-218
+253
 sheep-random?
 sheep-random?
 1
@@ -917,9 +918,9 @@ sheep-random?
 
 SWITCH
 175
-185
+220
 350
-218
+253
 wolves-random?
 wolves-random?
 1
@@ -927,10 +928,10 @@ wolves-random?
 -1000
 
 MONITOR
-285
-585
-342
-630
+640
+125
+697
+170
 sheep
 table:get smoothed-values \"seff-6\"
 3
@@ -938,10 +939,10 @@ table:get smoothed-values \"seff-6\"
 11
 
 MONITOR
-285
-675
-342
-720
+640
+215
+697
+260
 wolves
 table:get smoothed-values \"weff-6\"
 3
@@ -950,9 +951,9 @@ table:get smoothed-values \"weff-6\"
 
 SLIDER
 0
-150
+185
 175
-183
+218
 sheep-threshold
 sheep-threshold
 0
@@ -965,9 +966,9 @@ HORIZONTAL
 
 SLIDER
 175
-150
+185
 350
-183
+218
 wolf-threshold
 wolf-threshold
 0
@@ -979,10 +980,10 @@ NIL
 HORIZONTAL
 
 BUTTON
-400
-130
-512
-163
+195
+80
+307
+113
 NIL
 sample-effs\n
 NIL
@@ -1012,9 +1013,9 @@ HORIZONTAL
 
 SLIDER
 175
-80
+115
 350
-113
+148
 newborn-energy
 newborn-energy
 0
@@ -1027,9 +1028,9 @@ HORIZONTAL
 
 SLIDER
 175
-115
+150
 350
-148
+183
 wolf-gain-from-food
 wolf-gain-from-food
 0
@@ -1041,10 +1042,10 @@ NIL
 HORIZONTAL
 
 MONITOR
-285
-630
-342
-675
+640
+170
+697
+215
 escape
 table:get smoothed-values \"escape-6\"
 3
@@ -1052,15 +1053,30 @@ table:get smoothed-values \"escape-6\"
 11
 
 SWITCH
-255
-255
-387
-288
+175
+290
+350
+323
 crossover?
 crossover?
 0
 1
 -1000
+
+SLIDER
+0
+290
+175
+323
+granularity
+granularity
+1
+vision
+2.0
+1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?

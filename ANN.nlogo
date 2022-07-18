@@ -121,8 +121,8 @@ to propogate
       set input bias + sum [ link-output ] of my-in-links
     ]
     (run act layer)
-    display
   ])
+  display
 end
 
 to randomize-weights
