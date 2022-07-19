@@ -41,6 +41,7 @@ to setup [ layer-counts activation-names ]
           set-output (exp input) / total
         ]
       ]]
+      act = "step" [ [ nodes -> ask nodes [ set-output step input ] ] ]
     )
   ] activation-names
 
@@ -236,6 +237,13 @@ to-report tanh [ x ]
   let ex exp x
   let enx exp (0 - x)
   report (ex - enx) / (ex + enx)
+end
+
+to-report step [ x ]
+  if x > 0 [
+    report 1
+  ]
+  report 0
 end
 
 to-report sigmoid [x]

@@ -1,4 +1,4 @@
-extensions [ ls rnd table profiler ]
+extensions [ ls rnd table profiler matrix ]
 
 
 globals [
@@ -84,7 +84,7 @@ to setup
   ;    [ -> binary any? other (in-vision-at wolves (fov / 3)) ]
   ;  )
   let viz-seg-size vision / granularity
-  set inputs (reduce sentence
+  set inputs lput [ -> 1 ] (reduce sentence
     (map [ min-dist ->
       reduce sentence map [ angle ->
         (list
@@ -238,26 +238,32 @@ to go
 end
 
 to-report make-brain
-  let b 0
-  ifelse empty? brain-pool [
-    (ls:create-models 1 "ANN.nlogo" [ id -> ls:hide id set b id ])
-  ] [
-    set b first brain-pool
-    set brain-pool but-first brain-pool
+;  let b 0
+;  ifelse empty? brain-pool [
+;    (ls:create-models 1 "ANN.nlogo" [ id -> ls:hide id set b id ])
+;  ] [
+;    set b first brain-pool
+;    set brain-pool but-first brain-pool
+;  ]
+;  (ls:ask b [ ls ->
+;    set color-links? false
+;    setup ls ["step" "softmax"]
+;    randomize-weights
+;    ask item 2 layers [ set-bias 0 ]
+;  ] layers)
+  let hidden matrix:from-row-list n-values (item 1 layers) [
+    n-values (item 0 layers) [ random-normal 0 1 ]
   ]
-  (ls:ask b [ ls ->
-    set color-links? false
-    setup ls ["sigmoid" "softmax"]
-    randomize-weights
-    ask item 2 layers [ set-bias 0 ]
-  ] layers)
-  report b
+  let out matrix:from-row-list n-values (item 2 layers) [
+    n-values (item 1 layers) [ random-normal 0 1 ]
+  ]
+  report (list hidden out)
 end
 
 
 to setup-brain
   set brain make-brain
-  ls:set-name brain (word "Brain of " self)
+;  ls:set-name brain (word "Brain of " self)
   if include-null? [
     set null-brain make-brain
   ]
@@ -283,7 +289,12 @@ to go-brain
 end
 
 to-report sense
-  report apply-brain (map runresult inputs)
+  let in matrix:from-column-list (list (map runresult inputs))
+  let hidden matrix:map [x -> ifelse-value x > 0 [ 1 ] [ 0 ] ] ((first brain) matrix:* in)
+  let out map exp first matrix:to-column-list ((last brain) matrix:* hidden)
+  let d sum out
+  report map [ x -> x / d ] out
+;  report apply-brain (map runresult inputs)
 end
 
 to-report apply-brain [ in ]
@@ -314,24 +325,28 @@ to reproduce [ threshold ]
   set energy energy - baby-energy
 ;  ls:let child-weights map [ w -> random-normal w mut-rate ] [get-weights] ls:of brain
 ;  ls:let child-biases map [ b -> random-normal b mut-rate ] [get-biases] ls:of brain
-  let weights [ get-layer-weights 1 ] ls:of brain
-  if crossover? [
-    let parent-b-weights [ [ get-layer-weights 1 ] ls:of brain ] of min-one-of other breed [ distance myself ]
-    let crossover-index random length weights
-    set weights (sentence (sublist weights 0 crossover-index) (sublist parent-b-weights crossover-index length parent-b-weights))
-  ]
-  ls:let child-weights map [ ws -> map [ w -> random-normal w mut-rate ] ws ] weights
+;  let weights [ get-layer-weights 1 ] ls:of brain
+;  let baby-brain
+;  if crossover? [
+;    let parent-b-weights [ [ get-layer-weights 1 ] ls:of brain ] of min-one-of other breed [ distance myself ]
+;    let crossover-index random length weights
+;    set weights (sentence (sublist weights 0 crossover-index) (sublist parent-b-weights crossover-index length parent-b-weights))
+;  ]
+;  ls:let child-weights map [ ws -> map [ w -> random-normal w mut-rate ] ws ] weights
   let child nobody
   hatch 1 [
     set energy baby-energy
-    setup-brain
+;    setup-brain
 ;    ls:ask brain [
 ;      set-weights child-weights
 ;      set-biases child-biases
 ;    ]
-    ls:ask brain [
-      set-layer-weights 1 child-weights
-    ]
+;    ls:ask brain [
+;      set-layer-weights 1 child-weights
+;    ]
+    set brain map [ b ->
+      matrix:map [ w -> random-normal w mut-rate ] b
+    ] [ brain ] of myself
     rt random-float 360 fd 1
     set child self
   ]
@@ -379,8 +394,8 @@ end
 
 to kill
   delete-stats
-  ls:set-name brain "In pool"
-  set brain-pool fput brain brain-pool
+;  ls:set-name brain "In pool"
+;  /set brain-pool fput brain brain-pool
   if include-null? [
     set brain-pool fput null-brain brain-pool
   ]
@@ -846,7 +861,7 @@ INPUTBOX
 80
 385
 mut-rate
-1.0
+0.01
 1
 0
 Number
