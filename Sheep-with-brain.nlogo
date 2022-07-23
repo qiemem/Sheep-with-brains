@@ -943,7 +943,7 @@ SWITCH
 323
 wolves-random?
 wolves-random?
-1
+0
 1
 -1000
 
@@ -1079,7 +1079,7 @@ SWITCH
 358
 crossover?
 crossover?
-0
+1
 1
 -1000
 

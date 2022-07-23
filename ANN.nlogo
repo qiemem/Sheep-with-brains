@@ -8,7 +8,6 @@ globals [
 turtles-own [
   output
   input
-  bias ;; innate activation
 ]
 
 links-own [
@@ -118,7 +117,7 @@ end
 to propogate
   (foreach (but-first layers) activation-lambdas [ [layer act] ->
     ask layer [
-      set input bias + sum [ link-output ] of my-in-links
+      set input sum [ link-output ] of my-in-links
     ]
     (run act layer)
   ])
@@ -127,7 +126,6 @@ end
 
 to randomize-weights
   ask links [ set-weight random-normal 0 1 ]
-  ask turtles [ set-bias random-normal 0 1 ]
   display
 end
 
@@ -147,47 +145,29 @@ to set-weights [ weights ]
   ])
 end
 
-to set-biases [ biases ]
-  (foreach (sort turtles) (biases) [ [node b] ->
-    ask node [ set-bias b ]
-  ])
-end
-
 to-report get-weights
   report map [ l -> [weight] of l ] sort links
 end
 
 to-report get-layer-weights [ i ]
   report map [ n ->
-    [ lput bias (map [ l -> [ weight ] of l ] sort my-links) ] of n
+    [ (map [ l -> [ weight ] of l ] sort my-links) ] of n
   ] sort item i layers
 end
 
 to set-layer-weights [ i weights ]
   (foreach (sort item i layers) weights [ [ node ws ] ->
     ask node [
-      set-bias last ws
-      (foreach (sort my-links) (but-last ws) [ [ l w ] ->
+      (foreach (sort my-links) ws [ [ l w ] ->
         ask l [ set-weight w ]
       ])
     ]
   ])
 end
 
-to-report get-biases
-  report map [ t -> [bias] of t ] sort turtles
-end
-
 to set-weight [ w ]
   set weight w
   update-link-look
-end
-
-to set-bias [ b ]
-  if not member? self input-node-list [
-    set bias b
-    set label precision b 1
-  ]
 end
 
 to recolor
