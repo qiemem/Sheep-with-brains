@@ -28,6 +28,7 @@ globals [
 
 
   inputs
+  input-descriptions
   outputs
   brain-pool
   layers
@@ -95,6 +96,19 @@ to setup
       ] (range (fov / -2 + 15) (fov / 2 - 15 + 1) 30)
     ] (range 0 vision viz-seg-size))
   )
+  set inputs lput [ -> 1 ] inputs ;; add bias
+
+  set input-descriptions lput "bias" (reduce sentence
+    (map [ min-dist ->
+      reduce sentence map [ angle ->
+        (list
+          (word "g " (precision (min-dist + viz-seg-size) 1) " " angle)
+          (word "s " (precision (min-dist + viz-seg-size) 1) " " angle)
+          (word "w " (precision (min-dist + viz-seg-size) 1) " " angle)
+        )
+      ] (range (fov / -2 + 15) (fov / 2 - 15 + 1) 30)
+    ] (range 0 vision viz-seg-size))
+  )
 
   set outputs (list
     [-> lt 30]
@@ -102,7 +116,7 @@ to setup
     [-> rt 30]
   )
 
-  set layers (sentence (length inputs)  (length inputs) (length outputs))
+  set layers (sentence (length inputs) hidden-nodes (length outputs))
 
   ask patches [
     set pcolor brown
@@ -143,6 +157,10 @@ to setup
 
   reset-ticks
 end
+
+;to test-vision
+;  ask one-of sheep [
+;
 
 to sample-effs
   setup
@@ -245,12 +263,14 @@ to-report make-brain
     set b first brain-pool
     set brain-pool but-first brain-pool
   ]
-  (ls:ask b [ ls ->
+  (ls:ask b [ [ ls desc ] ->
     set color-links? false
     setup ls ["sigmoid" "softmax"]
     randomize-weights
-    ask item 2 layers [ set-bias 0 ]
-  ] layers)
+    ask first layers [
+      set label item who desc
+    ]
+  ] layers input-descriptions )
   report b
 end
 
@@ -265,7 +285,7 @@ end
 
 to-report in-vision-at [ agentset angle min-dist max-dist ]
   rt angle
-  let result (agentset in-cone max-dist (fov / 3)) with [ distance myself > min-dist ]
+  let result (agentset in-cone max-dist 30) with [ distance myself > min-dist ]
   lt angle
   report result
 end
@@ -606,9 +626,9 @@ HORIZONTAL
 
 SLIDER
 0
-150
+220
 175
-183
+253
 sheep-gain-from-food
 sheep-gain-from-food
 0.0
@@ -636,9 +656,9 @@ HORIZONTAL
 
 SLIDER
 0
-115
+185
 175
-148
+218
 grass-regrowth-time
 grass-regrowth-time
 0
@@ -651,9 +671,9 @@ HORIZONTAL
 
 BUTTON
 0
-80
+150
 69
-113
+183
 setup
 setup
 NIL
@@ -668,9 +688,9 @@ NIL
 
 BUTTON
 70
-80
+150
 137
-113
+183
 go
 go
 T
@@ -705,9 +725,9 @@ PENS
 
 SLIDER
 0
-255
+80
 175
-288
+113
 vision
 vision
 0
@@ -720,9 +740,9 @@ HORIZONTAL
 
 SLIDER
 175
-255
+80
 350
-288
+113
 fov
 fov
 30
@@ -769,9 +789,9 @@ NIL
 
 PLOT
 0
-440
+385
 350
-635
+580
 sheep-reactions
 NIL
 NIL
@@ -789,9 +809,9 @@ PENS
 
 PLOT
 0
-635
+580
 350
-830
+775
 wolf-reactions
 NIL
 NIL
@@ -846,7 +866,7 @@ INPUTBOX
 80
 385
 mut-rate
-1.0
+0.1
 1
 0
 Number
@@ -907,9 +927,9 @@ PENS
 
 SWITCH
 0
-220
+290
 175
-253
+323
 sheep-random?
 sheep-random?
 1
@@ -918,9 +938,9 @@ sheep-random?
 
 SWITCH
 175
-220
+290
 350
-253
+323
 wolves-random?
 wolves-random?
 1
@@ -951,9 +971,9 @@ table:get smoothed-values \"weff-6\"
 
 SLIDER
 0
-185
+255
 175
-218
+288
 sheep-threshold
 sheep-threshold
 0
@@ -966,9 +986,9 @@ HORIZONTAL
 
 SLIDER
 175
-185
+255
 350
-218
+288
 wolf-threshold
 wolf-threshold
 0
@@ -981,9 +1001,9 @@ HORIZONTAL
 
 BUTTON
 195
-80
+150
 307
-113
+183
 NIL
 sample-effs\n
 NIL
@@ -1013,9 +1033,9 @@ HORIZONTAL
 
 SLIDER
 175
-115
+185
 350
-148
+218
 newborn-energy
 newborn-energy
 0
@@ -1028,9 +1048,9 @@ HORIZONTAL
 
 SLIDER
 175
-150
+220
 350
-183
+253
 wolf-gain-from-food
 wolf-gain-from-food
 0
@@ -1054,9 +1074,9 @@ table:get smoothed-values \"escape-6\"
 
 SWITCH
 175
-290
+325
 350
-323
+358
 crossover?
 crossover?
 0
@@ -1065,14 +1085,29 @@ crossover?
 
 SLIDER
 0
-290
+115
 175
-323
+148
 granularity
 granularity
 1
 vision
-2.0
+1.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+175
+115
+350
+148
+hidden-nodes
+hidden-nodes
+1
+20
+6.0
 1
 1
 NIL
