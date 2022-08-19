@@ -1,4 +1,4 @@
-extensions [ ls rnd table profiler ]
+extensions [ ls table csv ]
 
 
 globals [
@@ -26,28 +26,20 @@ globals [
 
   smoothed-values
 
+  sheep-inputs
+  sheep-input-descriptions
+  wolf-inputs
+  wolf-input-descriptions
 
-  inputs
-  input-descriptions
   outputs
   brain-pool
-  layers
+  sheep-layers
+  wolf-layers
 
   inspectable-brain
 
-  sheep-towards-grass
-  sheep-towards-sheep
-  sheep-towards-wolves
-  wolves-towards-grass
-  wolves-towards-sheep
-  wolves-towards-wolves
-
-  null-sheep-towards-grass
-  null-sheep-towards-sheep
-  null-sheep-towards-wolves
-  null-wolves-towards-grass
-  null-wolves-towards-sheep
-  null-wolves-towards-wolves
+  sheep-reactions
+  wolf-reactions
 
   drag-target
 ]
@@ -73,42 +65,13 @@ to setup
   set wolf-intake-attempts []
   set sheep-intake-attempts []
 
-;  set inputs (list
-;    [ -> binary any? (in-vision-at patches (- fov / 3)) with [ pcolor = green ] ]
-;    [ -> binary any? (in-vision-at patches 0) with [ pcolor = green ] ]
-;    [ -> binary any? (in-vision-at patches (fov / 3)) with [ pcolor = green ] ]
-;    [ -> binary any? other (in-vision-at sheep (- fov / 3)) ]
-;    [ -> binary any? other (in-vision-at sheep 0) ]
-  ;    [ -> binary any? other (in-vision-at sheep (fov / 3)) ]
-  ;    [ -> binary any? other (in-vision-at wolves (- fov / 3)) ]
-  ;    [ -> binary any? other (in-vision-at wolves 0) ]
-  ;    [ -> binary any? other (in-vision-at wolves (fov / 3)) ]
-  ;  )
-  let viz-seg-size vision / granularity
-  set inputs (reduce sentence
-    (map [ min-dist ->
-      reduce sentence map [ angle ->
-        (list
-          [ -> binary any? (in-vision-at patches angle min-dist (min-dist + viz-seg-size)) with [ pcolor = green ] ]
-          [ -> binary any? other (in-vision-at sheep angle min-dist (min-dist + viz-seg-size)) ]
-          [ -> binary any? other (in-vision-at wolves angle min-dist (min-dist + viz-seg-size)) ]
-        )
-      ] (range (fov / -2 + 15) (fov / 2 - 15 + 1) 30)
-    ] (range 0 vision viz-seg-size))
-  )
-  set inputs lput [ -> 1 ] inputs ;; add bias
+  set sheep-inputs input-pairs sheep-see-grass? sheep-see-sheep? sheep-see-wolves?
+  set sheep-input-descriptions map first sheep-inputs
+  set sheep-inputs map last sheep-inputs
 
-  set input-descriptions lput "bias" (reduce sentence
-    (map [ min-dist ->
-      reduce sentence map [ angle ->
-        (list
-          (word "g " (precision (min-dist + viz-seg-size) 1) " " angle)
-          (word "s " (precision (min-dist + viz-seg-size) 1) " " angle)
-          (word "w " (precision (min-dist + viz-seg-size) 1) " " angle)
-        )
-      ] (range (fov / -2 + 15) (fov / 2 - 15 + 1) 30)
-    ] (range 0 vision viz-seg-size))
-  )
+  set wolf-inputs input-pairs wolves-see-grass? wolves-see-sheep? wolves-see-wolves?
+  set wolf-input-descriptions map first wolf-inputs
+  set wolf-inputs map last wolf-inputs
 
   set outputs (list
     [-> lt 30]
@@ -116,7 +79,16 @@ to setup
     [-> rt 30]
   )
 
-  set layers (sentence (length inputs) hidden-nodes (length outputs))
+  if bs-save-weights? and behaviorspace-run-number > 0 [
+    file-open (word behaviorspace-experiment-name "_weights_" behaviorspace-run-number ".csv")
+    file-print (csv:to-row (list "run-number" "tick" "breed" "agent" "event" "weights"))
+  ]
+
+  set sheep-reactions map [ i -> map [ o -> 0 ] outputs ] sheep-inputs
+  set wolf-reactions map [ i -> map [ o -> 0 ] outputs ] wolf-inputs
+
+  set sheep-layers (sentence (length sheep-inputs) hidden-nodes (length outputs))
+  set wolf-layers (sentence (length wolf-inputs) hidden-nodes (length outputs))
 
   ask patches [
     set pcolor brown
@@ -149,6 +121,7 @@ to setup
   ask turtles [
     setup-brain
     add-stats
+    record-weights -1 "born"
   ]
 
   set grass count patches with [pcolor = green]
@@ -158,9 +131,48 @@ to setup
   reset-ticks
 end
 
-;to test-vision
-;  ask one-of sheep [
-;
+to-report input-pairs [ grass? sheep? wolves? ]
+  let seg-size vision / granularity
+  report lput (list "bias" [ -> 1 ]) (reduce sentence
+    (map [ min-dist ->
+      reduce sentence map [ angle ->
+        (sentence
+          (ifelse-value grass? [ (list grass-input angle min-dist seg-size) ] [ [] ])
+          (ifelse-value sheep? [ (list sheep-input angle min-dist seg-size) ] [ [] ])
+          (ifelse-value wolves? [ (list wolf-input angle min-dist seg-size) ] [ [] ])
+        )
+      ] (range (fov / -2 + 15) (fov / 2 - 15 + 1) 30)
+    ] (range 0 vision seg-size))
+  )
+end
+
+to-report grass-input [ angle min-dist seg-size ]
+  report (list
+    (word "g " (precision (min-dist + seg-size) 1) " " angle)
+    [ -> binary
+      any? (in-vision-at patches angle min-dist (min-dist +  seg-size))
+      with [ pcolor = green ]
+    ]
+  )
+end
+
+to-report sheep-input [ angle min-dist seg-size ]
+  report (list
+    (word "s " (precision (min-dist + seg-size) 1) " " angle)
+    [ -> binary
+      any? other (in-vision-at sheep angle min-dist (min-dist + seg-size))
+    ]
+  )
+end
+
+to-report wolf-input [ angle min-dist seg-size ]
+  report (list
+    (word "w " (precision (min-dist + seg-size) 1) " " angle)
+    [ -> binary
+      any? other (in-vision-at wolves angle min-dist (min-dist + seg-size))
+    ]
+  )
+end
 
 to sample-effs
   setup
@@ -270,8 +282,20 @@ to-report make-brain
     ask first layers [
       set label item who desc
     ]
-  ] layers input-descriptions )
+  ] layers input-descriptions)
   report b
+end
+
+to-report layers
+  report ifelse-value breed = sheep [ sheep-layers ] [ wolf-layers ]
+end
+
+to-report input-descriptions
+  report ifelse-value breed = sheep [ sheep-input-descriptions ] [ wolf-input-descriptions ]
+end
+
+to-report inputs
+  report ifelse-value breed = sheep [ sheep-inputs ] [ wolf-inputs ]
 end
 
 
@@ -354,6 +378,7 @@ to reproduce [ threshold ]
     ]
     rt random-float 360 fd 1
     set child self
+    record-weights ticks (word "born " [ who ] of myself)
   ]
   if include-null? [
     ls:let null-weights map [ w -> random-normal w mut-rate ] [get-weights] ls:of null-brain
@@ -382,7 +407,10 @@ to catch-sheep  ;; wolf procedure
     set sheep-eaten sheep-eaten + 1
     set wolf-efficiency wolf-efficiency + 1 / prob-of-eating
     set energy energy + round (wolf-gain-from-food * [ energy ] of prey)
-    ask prey [ kill ]
+    ask prey [
+      record-weights ticks (word "eaten " ([ who ] of myself))
+      kill
+    ]
     if not any? sheep-here [
       set patches-with-sheep patches-with-sheep - 1
     ]
@@ -393,6 +421,7 @@ end
 
 to death  ;; turtle procedure
   if energy < 0 [
+    record-weights ticks "starved"
     kill
   ]
 end
@@ -443,37 +472,44 @@ to-report turn-right? [ activation ]
   report not first activation and last activation
 end
 
+to-report serialize-event [ t event ]
+  let weights [ get-weights ] ls:of brain
+  let formatted-weights (word "[" reduce [ [accum x] -> (word accum "," x) ] map [ x -> precision x 3 ] weights "]")
+  report csv:to-row (list behaviorspace-run-number t breed who event formatted-weights)
+end
+
+to record-weights [ t event ]
+  if bs-save-weights? and behaviorspace-run-number > 0 [
+    file-print serialize-event t event
+  ]
+end
+
 to add-stats
-  change-stats 1
+  change-stats  1
 end
 
 to delete-stats
   change-stats -1
 end
 
+to-report get-reactions
+  report map [ i ->
+    (ls:report brain [ j -> apply-reals lput 1 one-hot (count first layers - 1) j ] i)
+  ] range (length inputs)
+
+end
+
 to change-stats [ scale ]
-  stop
+  if not track-reactions? [ stop ]
   if is-a-sheep? self [
-    set sheep-towards-grass sheep-towards-grass + scale * towards-type 0 brain
-    set sheep-towards-sheep sheep-towards-sheep + scale * towards-type 3 brain
-    set sheep-towards-wolves sheep-towards-wolves + scale * towards-type 6 brain
+    set sheep-reactions (map [ [ totals new ] ->
+      (map [ [ t n ] -> t + scale * n ] totals new)
+    ] sheep-reactions get-reactions)
   ]
   if is-wolf? self [
-    set wolves-towards-grass wolves-towards-grass + scale * towards-type 0 brain
-    set wolves-towards-sheep wolves-towards-sheep + scale * towards-type 3 brain
-    set wolves-towards-wolves wolves-towards-wolves + scale * towards-type 6 brain
-  ]
-  if include-null? [
-    if is-a-sheep? self [
-      set null-sheep-towards-grass null-sheep-towards-grass + scale * towards-type 0 null-brain
-      set null-sheep-towards-sheep null-sheep-towards-sheep + scale * towards-type 3 null-brain
-      set null-sheep-towards-wolves null-sheep-towards-wolves + scale * towards-type 6 null-brain
-    ]
-    if is-wolf? self [
-      set null-wolves-towards-grass null-wolves-towards-grass + scale * towards-type 0 null-brain
-      set null-wolves-towards-sheep null-wolves-towards-sheep + scale * towards-type 3 null-brain
-      set null-wolves-towards-wolves null-wolves-towards-wolves + scale * towards-type 6 null-brain
-    ]
+    set wolf-reactions (map [ [ totals new ] ->
+      (map [ [ t n ] -> t + scale * n ] totals new)
+    ] wolf-reactions get-reactions)
   ]
 end
 
@@ -502,46 +538,6 @@ to-report smoothed-val [ name cur-value poles c ]
   ]
   report cur-value
 end
-
-to-report s-to-g
-  report safe-div sheep-towards-grass count sheep
-end
-to-report s-to-s
-  report safe-div sheep-towards-sheep count sheep
-end
-to-report s-to-w
-  report safe-div sheep-towards-wolves count sheep
-end
-to-report w-to-g
-  report safe-div wolves-towards-grass count wolves
-end
-to-report w-to-s
-  report safe-div wolves-towards-sheep count wolves
-end
-to-report w-to-w
-  report safe-div wolves-towards-wolves count wolves
-end
-
-to-report null-s-to-g
-  report safe-div null-sheep-towards-grass count sheep
-end
-to-report null-s-to-s
-  report safe-div null-sheep-towards-sheep count sheep
-end
-to-report null-s-to-w
-  report safe-div null-sheep-towards-wolves count sheep
-end
-to-report null-w-to-g
-  report safe-div null-wolves-towards-grass count wolves
-end
-to-report null-w-to-s
-  report safe-div null-wolves-towards-sheep count wolves
-end
-to-report null-w-to-w
-  report safe-div null-wolves-towards-wolves count wolves
-end
-
-
 
 to inspect-brain
   if mouse-inside? [
@@ -578,6 +574,23 @@ to drag
   display
 end
 
+to setup-reaction-plot [ descriptions ]
+  let i 0
+  let n length descriptions
+  foreach descriptions [ d ->
+    create-temporary-plot-pen d
+    set-plot-pen-color hsb (360 * i / n) 100 100
+    set i i + 1
+  ]
+end
+
+to update-reaction-plot [ descriptions reactions output agentset ]
+  if not track-reactions? [ stop ]
+  (foreach descriptions reactions [ [ d r ] ->
+    set-current-plot-pen d
+    plot (item output r) / count agentset
+  ])
+end
 
 ; Copyright 1997 Uri Wilensky.
 ; See Info tab for full copyright and license.
@@ -626,9 +639,9 @@ HORIZONTAL
 
 SLIDER
 0
-220
+325
 175
-253
+358
 sheep-gain-from-food
 sheep-gain-from-food
 0.0
@@ -656,9 +669,9 @@ HORIZONTAL
 
 SLIDER
 0
-185
+290
 175
-218
+323
 grass-regrowth-time
 grass-regrowth-time
 0
@@ -671,9 +684,9 @@ HORIZONTAL
 
 BUTTON
 0
-150
+255
 69
-183
+288
 setup
 setup
 NIL
@@ -688,9 +701,9 @@ NIL
 
 BUTTON
 70
-150
+255
 137
-183
+288
 go
 go
 T
@@ -747,7 +760,7 @@ fov
 fov
 30
 360
-150.0
+30.0
 60
 1
 NIL
@@ -787,46 +800,6 @@ NIL
 NIL
 1
 
-PLOT
-0
-385
-350
-580
-sheep-reactions
-NIL
-NIL
-0.0
-10.0
-0.0
-1.0
-true
-true
-"" ""
-PENS
-"towards-grass" 1.0 0 -10899396 true "" "plot s-to-g"
-"towards-sheep" 1.0 0 -13345367 true "" "plot s-to-s"
-"towards-wolves" 1.0 0 -2674135 true "" "plot s-to-w"
-
-PLOT
-0
-580
-350
-775
-wolf-reactions
-NIL
-NIL
-0.0
-10.0
-0.0
-1.0
-true
-true
-"" ""
-PENS
-"towards-grass" 1.0 0 -10899396 true "" "plot w-to-g"
-"towards-sheep" 1.0 0 -13345367 true "" "plot w-to-s"
-"towards-wolves" 1.0 0 -2674135 true "" "plot w-to-w"
-
 MONITOR
 640
 355
@@ -862,9 +835,9 @@ include-null?
 
 INPUTBOX
 0
-325
+430
 80
-385
+490
 mut-rate
 0.1
 1
@@ -927,9 +900,9 @@ PENS
 
 SWITCH
 0
-290
+395
 175
-323
+428
 sheep-random?
 sheep-random?
 1
@@ -938,9 +911,9 @@ sheep-random?
 
 SWITCH
 175
-290
+395
 350
-323
+428
 wolves-random?
 wolves-random?
 0
@@ -971,9 +944,9 @@ table:get smoothed-values \"weff-6\"
 
 SLIDER
 0
-255
+360
 175
-288
+393
 sheep-threshold
 sheep-threshold
 0
@@ -986,9 +959,9 @@ HORIZONTAL
 
 SLIDER
 175
-255
+360
 350
-288
+393
 wolf-threshold
 wolf-threshold
 0
@@ -1001,9 +974,9 @@ HORIZONTAL
 
 BUTTON
 195
-150
+255
 307
-183
+288
 NIL
 sample-effs\n
 NIL
@@ -1033,9 +1006,9 @@ HORIZONTAL
 
 SLIDER
 175
-185
+290
 350
-218
+323
 newborn-energy
 newborn-energy
 0
@@ -1048,9 +1021,9 @@ HORIZONTAL
 
 SLIDER
 175
-220
+325
 350
-253
+358
 wolf-gain-from-food
 wolf-gain-from-food
 0
@@ -1074,9 +1047,9 @@ table:get smoothed-values \"escape-6\"
 
 SWITCH
 175
-325
+430
 350
-358
+463
 crossover?
 crossover?
 1
@@ -1112,6 +1085,196 @@ hidden-nodes
 1
 NIL
 HORIZONTAL
+
+SWITCH
+0
+150
+175
+183
+sheep-see-grass?
+sheep-see-grass?
+0
+1
+-1000
+
+SWITCH
+0
+185
+175
+218
+sheep-see-wolves?
+sheep-see-wolves?
+0
+1
+-1000
+
+SWITCH
+0
+220
+175
+253
+sheep-see-sheep?
+sheep-see-sheep?
+0
+1
+-1000
+
+SWITCH
+175
+150
+350
+183
+wolves-see-grass?
+wolves-see-grass?
+1
+1
+-1000
+
+SWITCH
+175
+185
+350
+218
+wolves-see-wolves?
+wolves-see-wolves?
+1
+1
+-1000
+
+SWITCH
+175
+220
+350
+253
+wolves-see-sheep?
+wolves-see-sheep?
+1
+1
+-1000
+
+PLOT
+0
+540
+270
+875
+sheep-left
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+true
+"setup-reaction-plot sheep-input-descriptions" "update-reaction-plot sheep-input-descriptions sheep-reactions 0 sheep"
+PENS
+
+PLOT
+270
+540
+540
+875
+sheep-straight
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+true
+"setup-reaction-plot sheep-input-descriptions" "update-reaction-plot sheep-input-descriptions sheep-reactions 1 sheep"
+PENS
+
+PLOT
+540
+540
+810
+875
+sheep-right
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+true
+"setup-reaction-plot sheep-input-descriptions" "update-reaction-plot sheep-input-descriptions sheep-reactions 2 sheep"
+PENS
+
+PLOT
+810
+540
+1080
+875
+wolves-left
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+true
+"setup-reaction-plot wolf-input-descriptions" "update-reaction-plot wolf-input-descriptions wolf-reactions 0 wolves"
+PENS
+
+PLOT
+1080
+540
+1350
+875
+wolves-straight
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+true
+"setup-reaction-plot wolf-input-descriptions" "update-reaction-plot wolf-input-descriptions wolf-reactions 1 wolves"
+PENS
+
+PLOT
+1350
+540
+1620
+875
+wolves-right
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+true
+"setup-reaction-plot wolf-input-descriptions" "update-reaction-plot wolf-input-descriptions wolf-reactions 2 wolves"
+PENS
+
+SWITCH
+0
+490
+172
+523
+track-reactions?
+track-reactions?
+1
+1
+-1000
+
+SWITCH
+175
+490
+350
+523
+bs-save-weights?
+bs-save-weights?
+1
+1
+-1000
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1801,6 +1964,99 @@ repeat 75 [ go ]
     </enumeratedValueSet>
     <enumeratedValueSet variable="grass-regrowth-time">
       <value value="30"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="sheep-sweep-see-all" repetitions="1" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="100000"/>
+    <metric>count sheep</metric>
+    <metric>count wolves</metric>
+    <metric>grass</metric>
+    <metric>patches-with-sheep</metric>
+    <metric>grass-eaten</metric>
+    <metric>sheep-eaten</metric>
+    <metric>sheep-born</metric>
+    <metric>wolves-born</metric>
+    <metric>sheep-efficiency</metric>
+    <metric>sheep-escape-efficiency</metric>
+    <metric>wolf-efficiency</metric>
+    <metric>avg-grass</metric>
+    <metric>avg-patches-with-sheep</metric>
+    <enumeratedValueSet variable="sheep-random?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolf-gain-from-food">
+      <value value="0.7"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-threshold">
+      <value value="70"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-wolves?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="hidden-nodes">
+      <value value="6"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-random?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-wolves">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <steppedValueSet variable="fov" first="30" step="60" last="330"/>
+    <enumeratedValueSet variable="granularity">
+      <value value="1"/>
+      <value value="2"/>
+      <value value="3"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="vision">
+      <value value="3"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-sheep">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolf-threshold">
+      <value value="70"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-gain-from-food">
+      <value value="5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="grass-regrowth-time">
+      <value value="30"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-wolves?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-grass-density">
+      <value value="0.35"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="include-null?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="newborn-energy">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-sheep?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="mut-rate">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="crossover?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-sheep?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-grass?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-grass?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="track-reactions?">
+      <value value="false"/>
     </enumeratedValueSet>
   </experiment>
 </experiments>
