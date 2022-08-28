@@ -1969,7 +1969,7 @@ repeat 75 [ go ]
   <experiment name="sheep-sweep-see-all" repetitions="10" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
-    <timeLimit steps="100000"/>
+    <timeLimit steps="200000"/>
     <metric>count sheep</metric>
     <metric>count wolves</metric>
     <metric>grass</metric>
@@ -2062,7 +2062,7 @@ repeat 75 [ go ]
   <experiment name="wolves-sweep-see-all" repetitions="10" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
-    <timeLimit steps="100000"/>
+    <timeLimit steps="200000"/>
     <metric>count sheep</metric>
     <metric>count wolves</metric>
     <metric>grass</metric>
