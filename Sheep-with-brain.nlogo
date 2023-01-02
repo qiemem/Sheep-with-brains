@@ -51,6 +51,7 @@ turtles-own [
   energy
   brain
   null-brain
+  probs
 ]
 patches-own [countdown]
 
@@ -132,23 +133,34 @@ to setup
 end
 
 to-report input-pairs [ grass? sheep? wolves? ]
-  let seg-size vision / granularity
+  let min-vision-dist 0
+  let seg-size (vision - min-vision-dist) / granularity
   report lput (list "bias" [ -> 1 ]) (reduce sentence
-    (map [ min-dist ->
-      reduce sentence map [ angle ->
+;    (map [ min-dist ->
+;      reduce sentence map [ angle ->
+;        (sentence
+;          (ifelse-value grass? [ (list grass-input angle min-dist seg-size) ] [ [] ])
+;          (ifelse-value sheep? [ (list sheep-input angle min-dist seg-size) ] [ [] ])
+;          (ifelse-value wolves? [ (list wolf-input angle min-dist seg-size) ] [ [] ])
+;        )
+;      ] (range (fov / -2 + 15) (fov / 2 - 15 + 1) 30)
+;    ] (range min-vision-dist vision seg-size))
+    (map [ angle ->
+      reduce sentence map [ min-dist ->
         (sentence
           (ifelse-value grass? [ (list grass-input angle min-dist seg-size) ] [ [] ])
           (ifelse-value sheep? [ (list sheep-input angle min-dist seg-size) ] [ [] ])
           (ifelse-value wolves? [ (list wolf-input angle min-dist seg-size) ] [ [] ])
         )
-      ] (range (fov / -2 + 15) (fov / 2 - 15 + 1) 30)
-    ] (range 0 vision seg-size))
+      ] (range min-vision-dist vision seg-size)
+    ] (range (fov / -2 + 15) (fov / 2 - 15 + 1) 30))
   )
 end
 
 to-report grass-input [ angle min-dist seg-size ]
   report (list
-    (word "g " (precision (min-dist + seg-size) 1) " " angle)
+    (list "g" (min-dist + seg-size) angle)
+;    (word "g " (precision (min-dist + seg-size) 1) " " angle)
     [ -> binary
       any? (in-vision-at patches angle min-dist (min-dist +  seg-size))
       with [ pcolor = green ]
@@ -158,7 +170,8 @@ end
 
 to-report sheep-input [ angle min-dist seg-size ]
   report (list
-    (word "s " (precision (min-dist + seg-size) 1) " " angle)
+    (list "s" (min-dist + seg-size) angle)
+;    (word "s " (precision (min-dist + seg-size) 1) " " angle)
     [ -> binary
       any? other (in-vision-at sheep angle min-dist (min-dist + seg-size))
     ]
@@ -167,7 +180,8 @@ end
 
 to-report wolf-input [ angle min-dist seg-size ]
   report (list
-    (word "w " (precision (min-dist + seg-size) 1) " " angle)
+    (list "w" (min-dist + seg-size) angle)
+;    (word "w " (precision (min-dist + seg-size) 1) " " angle)
     [ -> binary
       any? other (in-vision-at wolves angle min-dist (min-dist + seg-size))
     ]
@@ -282,8 +296,19 @@ to-report make-brain
     ask first layers [
       set label item who desc
     ]
-  ] layers input-descriptions)
+    (foreach (sort last layers) [ "left" "straight" "right" ] [ [ node l ] ->
+      ask node [ set label l ]
+    ])
+  ] layers map stringify-desc input-descriptions)
   report b
+end
+
+to-report stringify-desc [ d ]
+  ifelse is-string? d [
+    report d
+  ] [
+    report (word (item 0 d) " " (precision (item 1 d) 1) " " (precision (item 2 d) 1))
+  ]
 end
 
 to-report layers
@@ -317,11 +342,12 @@ end
 to go-brain
   let r random-float 1
   let i -1
-  let probs sense
+  set probs sense
   while [ r > 0 and i < length probs ] [
     set i i + 1
     set r r - item i probs
   ]
+;  set i position (max probs) probs
   run item i outputs
   fd 1
 end
@@ -560,12 +586,11 @@ to inspect-brain
 end
 
 to drag
-  ifelse mouse-down? and mouse-inside? [
-    if not is-turtle? drag-target [
-      set drag-target min-one-of turtles [ distancexy mouse-xcor mouse-ycor ]
-    ]
-    ask drag-target [
-      facexy mouse-xcor mouse-ycor
+  ifelse mouse-down? [
+    if mouse-inside? [
+      if not is-turtle? drag-target [
+        set drag-target min-one-of turtles [ distancexy mouse-xcor mouse-ycor ]
+      ]
       ask drag-target [ setxy mouse-xcor mouse-ycor ]
     ]
   ] [
@@ -574,24 +599,113 @@ to drag
   display
 end
 
+to face-mouse
+  ask subject [ facexy mouse-xcor mouse-ycor ]
+end
+
 to setup-reaction-plot [ descriptions ]
   let i 0
   let n length descriptions
   foreach descriptions [ d ->
-    create-temporary-plot-pen d
-    set-plot-pen-color hsb (360 * i / n) 100 100
-    set i i + 1
+    create-temporary-plot-pen stringify-desc d
+    ifelse is-string? d [
+      set-plot-pen-color black
+    ] [
+      let species item 0 d
+      let dist item 1 d
+      let angle item 2 d
+      let r 0
+      let g 0
+      let b 0
+;      (ifelse
+;        first d = "s" [ set b 255 ]
+;        first d = "w" [ set r 255 ]
+;        [ set b 255 set r 255]
+;      )
+;      set r r * (item 1 d) / vision
+;      set b b * (item 1 d) / vision
+;      set g 255 * ((fov) / 2 + last d) / fov
+      (ifelse
+        species = "s" [
+          set b 128 + 127 * dist / vision
+          ifelse angle < 0 [
+            set g 32 + 128 * (0 - angle) / (fov / 2 - 15)
+          ] [
+            set r 32 + 128 * angle / (fov / 2 - 15)
+          ]
+        ]
+        species = "w" [
+          set r 128 + 127 * dist / vision
+          ifelse angle < 0 [
+            set b 32 + 128 * (0 - angle) / (fov / 2 - 15)
+          ] [
+            set g 32 + 128 * angle / (fov / 2 - 15)
+          ]
+        ]
+        species = "g" [
+          set g 128 + 127 * dist / vision
+          (ifelse angle < 0 [
+            set r 32 + 128 * (0 - angle) / (fov / 2 - 15)
+          ] angle > 0 [
+            set b 32 + 128 * angle / (fov / 2 - 15)
+          ])
+        ]
+      )
+      set-plot-pen-color (list r g b)
+;      let h (ifelse-value
+;        species = "w" [ 0 ]
+;        species = "g" [ 120 ]
+;        species = "s" [ 240 ]
+;      ) + angle
+;      let s 100
+;      let b dist / vision * 50 + 50
+;      set-plot-pen-color hsb h s b
+      set i i + 1
+    ]
   ]
 end
 
 to update-reaction-plot [ descriptions reactions output agentset ]
   if not track-reactions? [ stop ]
   (foreach descriptions reactions [ [ d r ] ->
-    set-current-plot-pen d
+    set-current-plot-pen stringify-desc d
     plot (item output r) / count agentset
   ])
 end
 
+
+to update-subject
+  display
+  cd
+  ask turtle-set subject [
+    set probs sense
+    hatch 1 [
+      set color yellow
+      set shape "dot"
+      set size 0.1
+      pd
+      foreach (range (fov / -2) (fov / 2 + 1) 30) [ angle ->
+        rt angle
+        fd vision
+        bk vision
+        rt 0 - angle
+      ]
+      foreach (range 1 (granularity + 1)) [ g ->
+        let r vision * g / granularity
+        foreach (range (fov / -2) (fov / 2 + 1) 0.1) [ angle ->
+          pu
+          rt angle
+          fd r
+          stamp
+          bk r
+          rt 0 - angle
+        ]
+      ]
+      die
+    ]
+  ]
+  display
+end
 ; Copyright 1997 Uri Wilensky.
 ; See Info tab for full copyright and license.
 @#$#@#$#@
@@ -646,7 +760,7 @@ sheep-gain-from-food
 sheep-gain-from-food
 0.0
 50.0
-5.0
+3.0
 1.0
 1
 NIL
@@ -718,9 +832,9 @@ NIL
 
 PLOT
 355
-270
+315
 705
-495
+540
 populations
 time
 pop.
@@ -789,7 +903,7 @@ BUTTON
 535
 43
 reset-perspective
-ask turtles [ stop-inspecting self ]\nreset-perspective\nstop-inspecting-dead-agents\nls:hide ls:models\nls:ask ls:models [ set color-links? false ]\nask sheep [ set shape \"sheep\" ]\nask wolves [ set shape \"wolf\" ]
+cd\nask turtles [ stop-inspecting self ]\nreset-perspective\nstop-inspecting-dead-agents\nls:hide ls:models\nls:ask ls:models [ set color-links? false ]\nask sheep [ set shape \"sheep\" ]\nask wolves [ set shape \"wolf\" ]
 NIL
 1
 T
@@ -802,9 +916,9 @@ NIL
 
 MONITOR
 640
-355
-697
 400
+697
+445
 sheep
 count sheep
 17
@@ -813,25 +927,14 @@ count sheep
 
 MONITOR
 640
-400
-697
 445
+697
+490
 wolves
 count wolves
 17
 1
 11
-
-SWITCH
-175
-45
-350
-78
-include-null?
-include-null?
-1
-1
--1000
 
 INPUTBOX
 0
@@ -839,7 +942,7 @@ INPUTBOX
 80
 490
 mut-rate
-0.1
+1.0
 1
 0
 Number
@@ -849,8 +952,8 @@ BUTTON
 10
 650
 43
+NIL
 update-subject
-ask turtle-set subject [ __ignore sense ]
 T
 1
 T
@@ -867,7 +970,7 @@ BUTTON
 705
 43
 drag
-if mouse-down? and mouse-inside? [\n  ask min-one-of turtles [ distancexy mouse-xcor mouse-ycor ] [\n    setxy mouse-xcor mouse-ycor\n  ]\n]\ndisplay
+drag
 T
 1
 T
@@ -880,9 +983,9 @@ NIL
 
 PLOT
 355
-45
+90
 705
-270
+315
 smoothed efficiency
 NIL
 NIL
@@ -905,7 +1008,7 @@ SWITCH
 428
 sheep-random?
 sheep-random?
-0
+1
 1
 -1000
 
@@ -916,15 +1019,15 @@ SWITCH
 428
 wolves-random?
 wolves-random?
-1
+0
 1
 -1000
 
 MONITOR
 640
-125
-697
 170
+697
+215
 sheep
 table:get smoothed-values \"seff-6\"
 3
@@ -933,9 +1036,9 @@ table:get smoothed-values \"seff-6\"
 
 MONITOR
 640
-215
-697
 260
+697
+305
 wolves
 table:get smoothed-values \"weff-6\"
 3
@@ -1036,9 +1139,9 @@ HORIZONTAL
 
 MONITOR
 640
-170
-697
 215
+697
+260
 escape
 table:get smoothed-values \"escape-6\"
 3
@@ -1052,7 +1155,7 @@ SWITCH
 463
 crossover?
 crossover?
-1
+0
 1
 -1000
 
@@ -1093,7 +1196,7 @@ SWITCH
 183
 sheep-see-grass?
 sheep-see-grass?
-1
+0
 1
 -1000
 
@@ -1104,7 +1207,7 @@ SWITCH
 218
 sheep-see-wolves?
 sheep-see-wolves?
-1
+0
 1
 -1000
 
@@ -1115,7 +1218,7 @@ SWITCH
 253
 sheep-see-sheep?
 sheep-see-sheep?
-1
+0
 1
 -1000
 
@@ -1126,7 +1229,7 @@ SWITCH
 183
 wolves-see-grass?
 wolves-see-grass?
-0
+1
 1
 -1000
 
@@ -1137,7 +1240,7 @@ SWITCH
 218
 wolves-see-wolves?
 wolves-see-wolves?
-0
+1
 1
 -1000
 
@@ -1148,7 +1251,7 @@ SWITCH
 253
 wolves-see-sheep?
 wolves-see-sheep?
-0
+1
 1
 -1000
 
@@ -1156,7 +1259,7 @@ PLOT
 0
 540
 270
-875
+905
 sheep-left
 NIL
 NIL
@@ -1173,7 +1276,7 @@ PLOT
 270
 540
 540
-875
+905
 sheep-straight
 NIL
 NIL
@@ -1190,7 +1293,7 @@ PLOT
 540
 540
 810
-875
+905
 sheep-right
 NIL
 NIL
@@ -1207,7 +1310,7 @@ PLOT
 810
 540
 1080
-875
+905
 wolves-left
 NIL
 NIL
@@ -1224,7 +1327,7 @@ PLOT
 1080
 540
 1350
-875
+905
 wolves-straight
 NIL
 NIL
@@ -1241,7 +1344,7 @@ PLOT
 1350
 540
 1620
-875
+905
 wolves-right
 NIL
 NIL
@@ -1275,6 +1378,67 @@ bs-save-weights?
 1
 1
 -1000
+
+SWITCH
+175
+45
+350
+78
+include-null?
+include-null?
+1
+1
+-1000
+
+BUTTON
+595
+45
+705
+78
+NIL
+face-mouse
+NIL
+1
+T
+OBSERVER
+NIL
+F
+NIL
+NIL
+1
+
+MONITOR
+355
+45
+412
+90
+left
+[ item 0 probs ] of subject
+4
+1
+11
+
+MONITOR
+410
+45
+472
+90
+forward
+[ item 1 probs ] of subject
+4
+1
+11
+
+MONITOR
+470
+45
+527
+90
+right
+[ item 2 probs ] of subject
+4
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1455,6 +1619,15 @@ cylinder
 false
 0
 Circle -7500403 true true 0 0 300
+
+default-with-border
+true
+0
+Polygon -7500403 true true 150 5 40 250 150 205 260 250
+Line -16777216 false 150 0 30 255
+Line -16777216 false 45 255 150 210
+Line -16777216 false 150 210 270 255
+Line -16777216 false 150 0 270 255
 
 dot
 false
@@ -1682,7 +1855,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.2.2
+NetLogo 6.3.0
 @#$#@#$#@
 setup
 set grass? true
@@ -2207,6 +2380,107 @@ repeat 75 [ go ]
     </enumeratedValueSet>
     <enumeratedValueSet variable="mut-rate">
       <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="crossover?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-sheep">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-wolves">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-grass-density">
+      <value value="0.35"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-threshold">
+      <value value="70"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolf-threshold">
+      <value value="70"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="grass-regrowth-time">
+      <value value="30"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="newborn-energy">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolf-gain-from-food">
+      <value value="0.7"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-gain-from-food">
+      <value value="5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="include-null?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="track-reactions?">
+      <value value="false"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="sheep-mut-rate-see-all" repetitions="10" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="200000"/>
+    <metric>count sheep</metric>
+    <metric>count wolves</metric>
+    <metric>grass</metric>
+    <metric>patches-with-sheep</metric>
+    <metric>grass-eaten</metric>
+    <metric>sheep-eaten</metric>
+    <metric>sheep-born</metric>
+    <metric>wolves-born</metric>
+    <metric>sheep-efficiency</metric>
+    <metric>sheep-escape-efficiency</metric>
+    <metric>wolf-efficiency</metric>
+    <metric>avg-grass</metric>
+    <metric>avg-patches-with-sheep</metric>
+    <enumeratedValueSet variable="sheep-random?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-random?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="granularity">
+      <value value="2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fov">
+      <value value="150"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-grass?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-sheep?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-wolves?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-grass?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-sheep?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-wolves?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="vision">
+      <value value="3"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="hidden-nodes">
+      <value value="6"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="mut-rate">
+      <value value="0.001"/>
+      <value value="0.003"/>
+      <value value="0.01"/>
+      <value value="0.03"/>
+      <value value="0.1"/>
+      <value value="0.3"/>
+      <value value="1"/>
+      <value value="3"/>
+      <value value="10"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="crossover?">
       <value value="false"/>
