@@ -2,12 +2,12 @@ globals [
   layers
   activation-lambdas
   input-node-list
-  output-node-list
+  activation-node-list
 ]
 
 turtles-own [
-  output
-  input
+  activation
+;  input
 ]
 
 links-own [
@@ -31,13 +31,13 @@ to setup [ layer-counts activation-names ]
 
   set activation-lambdas map [ act ->
     (ifelse-value
-      act = "relu" [ [ nodes -> ask nodes [ set-output relu input ] ] ]
-      act = "sigmoid" [ [ nodes -> ask nodes [ set-output sigmoid input ] ] ]
-      act = "tanh" [ [ nodes -> ask nodes [ set-output tanh input ] ] ]
+      act = "relu" [ [ nodes -> ask nodes [ set-activation relu input ] ] ]
+      act = "sigmoid" [ [ nodes -> ask nodes [ set-activation sigmoid input ] ] ]
+      act = "tanh" [ [ nodes -> ask nodes [ set-activation tanh input ] ] ]
       act = "softmax" [ [ nodes ->
         let total sum [ exp input ] of nodes
         ask nodes [
-          set-output (exp input) / total
+          set-activation (exp input) / total
         ]
       ]]
     )
@@ -74,7 +74,7 @@ to setup [ layer-counts activation-names ]
     ]
   ])
   set input-node-list sort first layers
-  set output-node-list sort last layers
+  set activation-node-list sort last layers
   reset-ticks
 end
 
@@ -94,12 +94,12 @@ end
 to-report apply-reals [ in ]
   set-input in
   propogate
-  report map [ node -> [ output ] of node ] output-node-list
+  report map [ node -> [ activation ] of node ] activation-node-list
 end
 
 to set-input [ in ]
   (foreach input-node-list in [ [node x] ->
-    ask node [ set-output x ]
+    ask node [ set-activation x ]
   ])
 end
 
@@ -107,18 +107,22 @@ to click-input
   if mouse-inside? and mouse-down? [
     every 0.2 [
       ask min-one-of first layers [ distancexy mouse-xcor mouse-ycor ] [
-        set-output ifelse-value (output > 0.5)[ 0 ] [ 1 ]
+        set-activation ifelse-value (activation > 0.5)[ 0 ] [ 1 ]
         propogate
       ]
     ]
   ]
 end
 
+to-report input
+  report sum [ link-activation ] of my-in-links
+end
+
 to propogate
   (foreach (but-first layers) activation-lambdas [ [layer act] ->
-    ask layer [
-      set input sum [ link-output ] of my-in-links
-    ]
+;    ask layer [
+;      set input sum [ link-activation ] of my-in-links
+;    ]
     (run act layer)
   ])
   display
@@ -129,12 +133,12 @@ to randomize-weights
   display
 end
 
-to-report link-output
-  report weight * [ output ] of end1
+to-report link-activation
+  report weight * [ activation ] of end1
 end
 
-to set-output [ a ]
-  set output a
+to set-activation [ a ]
+  set activation a
   recolor
   if color-links? [ ask my-out-links [ update-link-look ] ]
 end
@@ -171,16 +175,16 @@ to set-weight [ w ]
 end
 
 to recolor
-  ifelse output > 0.5 [
+  ifelse activation > 0.5 [
     set color yellow - 2
   ] [
     set color grey
   ]
-  set size 0.5 + tanh abs output
+  set size 0.5 + tanh abs activation
 end
 
 to update-link-look
-  let a tanh (weight * [ output ] of end1)
+  let a tanh (weight * [ activation ] of end1)
   let alpha 128 + 127 * (abs a)
   if a > 0 [
     set color (list 255 0 0 alpha)
@@ -679,7 +683,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.2.2
+NetLogo 6.3.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
