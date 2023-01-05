@@ -760,7 +760,7 @@ sheep-gain-from-food
 sheep-gain-from-food
 0.0
 50.0
-3.0
+5.0
 1.0
 1
 NIL
@@ -942,7 +942,7 @@ INPUTBOX
 80
 490
 mut-rate
-1.0
+10.0
 1
 0
 Number
@@ -1155,7 +1155,7 @@ SWITCH
 463
 crossover?
 crossover?
-0
+1
 1
 -1000
 
@@ -2418,10 +2418,10 @@ repeat 75 [ go ]
       <value value="false"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="sheep-mut-rate-see-all" repetitions="10" runMetricsEveryStep="true">
+  <experiment name="sheep-mut-rate-see-all" repetitions="1" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
-    <timeLimit steps="200000"/>
+    <timeLimit steps="20000"/>
     <metric>count sheep</metric>
     <metric>count wolves</metric>
     <metric>grass</metric>
@@ -2484,6 +2484,7 @@ repeat 75 [ go ]
     </enumeratedValueSet>
     <enumeratedValueSet variable="crossover?">
       <value value="false"/>
+      <value value="true"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="initial-number-sheep">
       <value value="50"/>

@@ -35,9 +35,11 @@ to setup [ layer-counts activation-names ]
       act = "sigmoid" [ [ nodes -> ask nodes [ set-activation sigmoid input ] ] ]
       act = "tanh" [ [ nodes -> ask nodes [ set-activation tanh input ] ] ]
       act = "softmax" [ [ nodes ->
-        let total sum [ exp input ] of nodes
+        let max-input max [ input ] of nodes
+        ; -max to keep values under 0, thus preventing overflow, without altering answer
+        let total sum [ exp (input - max-input) ] of nodes
         ask nodes [
-          set-activation (exp input) / total
+          set-activation (exp (input - max-input)) / total
         ]
       ]]
     )
@@ -223,7 +225,13 @@ to-report tanh [ x ]
 end
 
 to-report sigmoid [x]
-  report 1 / (1 + exp (- x))
+  ; prevent overflow
+  ifelse x < 0 [
+    let a exp x
+    report a / (1 + a)
+  ] [
+    report 1 / (1 + exp (- x))
+  ]
 end
 
 to-report one-hot [ n i ]
