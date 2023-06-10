@@ -131,8 +131,14 @@ to propogate
 end
 
 to randomize-weights
-  ask links [ set-weight random-normal 0 1 ]
+  ask links [ set-weight random-normal 0 .1 ]
+;  ask links [ set-weight random-xavier ]
+;  ask links [ set-weight random-normal 0 1 / [ count my-in-links ] of end2 ]
   display
+end
+
+to-report random-xavier
+  report (sqrt 6) / sqrt ([ count my-in-links ] of end2 + [ count my-out-links ] of end1) * (1 - random-float 2)
 end
 
 to-report link-activation

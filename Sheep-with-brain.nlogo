@@ -36,8 +36,6 @@ globals [
   sheep-layers
   wolf-layers
 
-  inspectable-brain
-
   sheep-reactions
   wolf-reactions
 
@@ -46,6 +44,9 @@ globals [
   ; only used with single-brain? enabled
   sheep-brain
   wolf-brain
+
+  sheep-probs
+  wolf-probs
 ]
 
 ;; Sheep and wolves are both breeds of turtle.
@@ -69,6 +70,10 @@ to setup
   set wolf-intake []
   set wolf-intake-attempts []
   set sheep-intake-attempts []
+
+
+  set sheep-probs []
+  set wolf-probs []
 
   set sheep-inputs input-pairs sheep-see-grass? sheep-see-sheep? sheep-see-wolves?
   set sheep-input-descriptions map first sheep-inputs
@@ -228,6 +233,8 @@ end
 
 to go
   if not any? turtles [ stop ]
+  set sheep-probs []
+  set wolf-probs []
   set sheep-efficiency 0
   set wolf-efficiency 0
   set sheep-escape-efficiency 0
@@ -293,17 +300,30 @@ to-report make-brain
     set b first brain-pool
     set brain-pool but-first brain-pool
   ]
-  (ls:ask b [ [ ls desc ] ->
+  ; Allow weight initialization to be based off mut-rate
+  let iw init-weights
+  let mr-ix position "mut-rate" iw
+  if is-number? mr-ix [
+    set iw insert-item mr-ix (remove "mut-rate" iw) (word mut-rate)
+  ]
+
+  ls:let iw iw
+  ls:let ls layers
+  ls:let desc map stringify-desc input-descriptions
+  ls:let mut-rate mut-rate
+  ls:ask b [
     set color-links? false
     setup ls ["sigmoid" "softmax"]
-    randomize-weights
+;    randomize-weights
+    ask links [ set-weight runresult iw ]
     ask first layers [
       set label item who desc
     ]
     (foreach (sort last layers) [ "left" "straight" "right" ] [ [ node l ] ->
       ask node [ set label l ]
     ])
-  ] layers map stringify-desc input-descriptions)
+    ask turtles with [ label = "bias" ] [ ask my-out-links [ set-weight 0 ] ]
+  ]
   report b
 end
 
@@ -360,6 +380,11 @@ to go-brain
   let r random-float 1
   let i -1
   set probs sense
+  ifelse breed = sheep [
+    set sheep-probs lput probs sheep-probs
+  ] [
+    set wolf-probs lput probs wolf-probs
+  ]
   while [ r > 0 and i < length probs ] [
     set i i + 1
     set r r - item i probs
@@ -408,6 +433,8 @@ to reproduce [ threshold ]
     set weights (sentence (sublist weights 0 crossover-index) (sublist parent-b-weights crossover-index length parent-b-weights))
   ]
   ls:let child-weights map [ ws -> map [ w -> random-normal w mut-rate ] ws ] weights
+;  ls:let child-weights weights
+  ls:let mr mut-rate
   let child nobody
   hatch 1 [
     set energy baby-energy
@@ -418,6 +445,13 @@ to reproduce [ threshold ]
 ;    ]
     ls:ask brain [
       set-layer-weights 1 child-weights
+;      (foreach (sort item 1 layers) child-weights [ [ node ws ] ->
+;        ask node [
+;          (foreach (sort my-links) ws [ [ l w ] ->
+;            ask l [ set-weight w + mr * random-xavier ]
+;          ])
+;        ]
+;      ])
     ]
     rt random-float 360 fd 1
     set child self
@@ -480,28 +514,94 @@ to grow-grass  ;; patch procedure
   ]
 end
 
-to-report towards-type [ offset model ]
-  report mean map [ off ->
-    item off (ls:report model [ i -> apply-reals one-hot 9 i ] (offset + off))
-  ] range 3
+to-report action-prob [ prob-list action ]
+  if empty? prob-list [
+    report 0
+  ]
+  report mean map [ ps -> item action ps ] prob-list
 end
 
-to-report turn-left? [ activation ]
-  report first activation and not last activation
+to-report action-certainty [ prob-list action ]
+  let selected map [ ps -> item action ps ] filter [ ps -> max ps = item action ps ] prob-list
+  ifelse empty? selected [
+    report 0
+  ] [
+    report mean selected
+  ]
+end
+
+
+to-report sheep-certainty
+  if empty? sheep-probs [
+    report 0
+  ]
+  report mean map max sheep-probs
+end
+
+to-report sheep-left-prob
+  report action-prob sheep-probs 0
+end
+
+to-report sheep-straight-prob
+  report action-prob sheep-probs 1
+end
+
+to-report sheep-right-prob
+  report action-prob sheep-probs 2
+end
+
+to-report sheep-left-certainty
+  report action-certainty sheep-probs 0
+end
+
+to-report sheep-straight-certainty
+  report action-certainty sheep-probs 1
+end
+
+to-report sheep-right-certainty
+  report action-certainty sheep-probs 2
+end
+
+to-report wolf-certainty
+  if empty? wolf-probs [
+    report 0
+  ]
+  report mean map max wolf-probs
+end
+
+to-report wolf-left-prob
+  report action-prob wolf-probs 0
+end
+
+to-report wolf-straight-prob
+  report action-prob wolf-probs 1
+end
+
+to-report wolf-right-prob
+  report action-prob wolf-probs 2
+end
+
+to-report wolf-left-certainty
+  report action-certainty wolf-probs 0
+end
+
+to-report wolf-straight-certainty
+  report action-certainty wolf-probs 1
+end
+
+to-report wolf-right-certainty
+  report action-certainty wolf-probs 2
+end
+
+to plot-nz [ value ]
+  if value != 0 [
+    plotxy ticks value
+  ]
 end
 
 to-report binary [ bool ]
   if bool [ report 1 ]
   report 0
-end
-
-
-to-report go-straight? [ activation ]
-  report (first activation and last activation) or (not first activation and not last activation)
-end
-
-to-report turn-right? [ activation ]
-  report not first activation and last activation
 end
 
 to-report serialize-event [ t event ]
@@ -1037,7 +1137,7 @@ INPUTBOX
 80
 490
 mut-rate
-0.1
+10.0
 1
 0
 Number
@@ -1092,9 +1192,9 @@ true
 true
 "" ""
 PENS
-"sheep" 1.0 0 -13345367 true "" "plot smoothed-val \"seff\" sheep-efficiency 6 0.1"
-"wolf" 1.0 0 -2674135 true "" "plot smoothed-val \"weff\" wolf-efficiency 6 0.1"
-"escape" 1.0 0 -11221820 true "" "plot smoothed-val \"escape\" sheep-escape-efficiency 6 0.1"
+"sheep" 1.0 0 -13345367 true "" "if ticks > 0 [ plotxy ticks smoothed-val \"seff\" sheep-efficiency 6 0.1 ]"
+"wolf" 1.0 0 -2674135 true "" "if ticks > 0 [ plotxy ticks smoothed-val \"weff\" wolf-efficiency 6 0.1 ]"
+"escape" 1.0 0 -11221820 true "" "if ticks > 0 [ plotxy ticks smoothed-val \"escape\" sheep-escape-efficiency 6 0.1 ]"
 
 SWITCH
 0
@@ -1114,7 +1214,7 @@ SWITCH
 428
 wolves-random?
 wolves-random?
-0
+1
 1
 -1000
 
@@ -1250,7 +1350,7 @@ SWITCH
 463
 crossover?
 crossover?
-1
+0
 1
 -1000
 
@@ -1263,7 +1363,7 @@ granularity
 granularity
 1
 vision
-1.0
+2.0
 1
 1
 NIL
@@ -1551,6 +1651,58 @@ NIL
 NIL
 NIL
 1
+
+PLOT
+1250
+75
+1450
+225
+sheep certainty
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot-nz sheep-certainty"
+"pen-1" 1.0 0 -7500403 true "" "plot-nz sheep-straight-certainty"
+"pen-2" 1.0 0 -2674135 true "" "plot-nz sheep-left-certainty"
+"pen-3" 1.0 0 -955883 true "" "plot-nz sheep-right-certainty"
+
+INPUTBOX
+1250
+10
+1485
+70
+init-weights
+random-normal 0 mut-rate
+1
+0
+String (reporter)
+
+PLOT
+1250
+250
+1450
+400
+sheep probs
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -7500403 true "" "plot-nz sheep-straight-prob"
+"pen-1" 1.0 0 -2674135 true "" "plot-nz sheep-left-prob"
+"pen-2" 1.0 0 -955883 true "" "plot-nz sheep-right-prob"
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -3001,6 +3153,123 @@ repeat 75 [ go ]
     </enumeratedValueSet>
     <enumeratedValueSet variable="sheep-see-grass?">
       <value value="true"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="2023-06-10_sheep-mut-rate" repetitions="1" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="300000"/>
+    <metric>count sheep</metric>
+    <metric>count wolves</metric>
+    <metric>grass</metric>
+    <metric>patches-with-sheep</metric>
+    <metric>sheep-efficiency</metric>
+    <metric>sheep-escape-efficiency</metric>
+    <metric>wolf-efficiency</metric>
+    <metric>sheep-left-prob</metric>
+    <metric>sheep-straight-prob</metric>
+    <metric>sheep-right-prob</metric>
+    <metric>sheep-certainty</metric>
+    <metric>sheep-left-certainty</metric>
+    <metric>sheep-straight-certainty</metric>
+    <metric>sheep-right-certainty</metric>
+    <metric>wolf-left-prob</metric>
+    <metric>wolf-straight-prob</metric>
+    <metric>wolf-right-prob</metric>
+    <metric>wolf-certainty</metric>
+    <metric>wolf-left-certainty</metric>
+    <metric>wolf-straight-certainty</metric>
+    <metric>wolf-right-certainty</metric>
+    <enumeratedValueSet variable="mut-rate">
+      <value value="0.01"/>
+      <value value="0.02"/>
+      <value value="0.05"/>
+      <value value="0.1"/>
+      <value value="0.2"/>
+      <value value="0.5"/>
+      <value value="1"/>
+      <value value="2"/>
+      <value value="5"/>
+      <value value="10"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="crossover?">
+      <value value="false"/>
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-random?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-grass?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-sheep?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-wolves?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-random?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-grass?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-wolves?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-sheep?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolf-gain-from-food">
+      <value value="0.7"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fov">
+      <value value="210"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="granularity">
+      <value value="2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-threshold">
+      <value value="70"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="hidden-nodes">
+      <value value="6"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-wolves">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="track-reactions?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="vision">
+      <value value="3"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-sheep">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolf-threshold">
+      <value value="70"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-gain-from-food">
+      <value value="5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="grass-regrowth-time">
+      <value value="30"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="bs-save-weights?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="single-brain?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-grass-density">
+      <value value="0.35"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="newborn-energy">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="init-weights">
+      <value value="&quot;random-normal 0 mut-rate&quot;"/>
     </enumeratedValueSet>
   </experiment>
 </experiments>
