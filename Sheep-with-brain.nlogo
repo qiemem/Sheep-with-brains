@@ -1336,7 +1336,7 @@ SWITCH
 428
 sheep-random?
 sheep-random?
-0
+1
 1
 -1000
 
@@ -1347,7 +1347,7 @@ SWITCH
 428
 wolves-random?
 wolves-random?
-1
+0
 1
 -1000
 
@@ -3867,128 +3867,6 @@ repeat 75 [ go ]
       <value value="0.1"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="2023-06-29_sheep-mut-rate-1M-by-100" repetitions="1" runMetricsEveryStep="true">
-    <setup>setup</setup>
-    <go>repeat 100 [ go ]</go>
-    <timeLimit steps="10000"/>
-    <metric>ticks</metric>
-    <metric>count sheep</metric>
-    <metric>count wolves</metric>
-    <metric>grass</metric>
-    <metric>sheep-efficiency</metric>
-    <metric>sheep-escape-efficiency</metric>
-    <metric>wolf-efficiency</metric>
-    <metric>sheep-eat-attempts</metric>
-    <metric>wolf-eat-attempts</metric>
-    <metric>sheep-cert</metric>
-    <metric>sheep-lcert</metric>
-    <metric>sheep-scert</metric>
-    <metric>sheep-rcert</metric>
-    <metric>sheep-lnum</metric>
-    <metric>sheep-snum</metric>
-    <metric>sheep-rnum</metric>
-    <metric>sheep-lprob</metric>
-    <metric>sheep-sprob</metric>
-    <metric>sheep-rprob</metric>
-    <metric>wolf-cert</metric>
-    <metric>wolf-lcert</metric>
-    <metric>wolf-scert</metric>
-    <metric>wolf-rcert</metric>
-    <metric>wolf-lnum</metric>
-    <metric>wolf-snum</metric>
-    <metric>wolf-rnum</metric>
-    <metric>wolf-lprob</metric>
-    <metric>wolf-sprob</metric>
-    <metric>wolf-rprob</metric>
-    <enumeratedValueSet variable="mut-rate">
-      <value value="0.01"/>
-      <value value="0.02"/>
-      <value value="0.05"/>
-      <value value="0.1"/>
-      <value value="0.2"/>
-      <value value="0.5"/>
-      <value value="1"/>
-      <value value="2"/>
-      <value value="5"/>
-      <value value="10"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="crossover?">
-      <value value="false"/>
-      <value value="true"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="sheep-random?">
-      <value value="false"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="sheep-see-grass?">
-      <value value="true"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="sheep-see-sheep?">
-      <value value="true"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="sheep-see-wolves?">
-      <value value="true"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="wolves-random?">
-      <value value="true"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="wolves-see-grass?">
-      <value value="true"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="wolves-see-wolves?">
-      <value value="true"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="wolves-see-sheep?">
-      <value value="true"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="wolf-gain-from-food">
-      <value value="0.7"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="fov">
-      <value value="210"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="granularity">
-      <value value="2"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="sheep-threshold">
-      <value value="70"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="hidden-nodes">
-      <value value="6"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="initial-number-wolves">
-      <value value="50"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="track-reactions?">
-      <value value="false"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="vision">
-      <value value="3"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="initial-number-sheep">
-      <value value="50"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="wolf-threshold">
-      <value value="70"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="sheep-gain-from-food">
-      <value value="5"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="grass-regrowth-time">
-      <value value="30"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="bs-save-weights?">
-      <value value="false"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="single-brain?">
-      <value value="false"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="initial-grass-density">
-      <value value="0.35"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="newborn-energy">
-      <value value="0.1"/>
-    </enumeratedValueSet>
-  </experiment>
   <experiment name="2023-06-29_wolf-mut-rate-1000-by-100" repetitions="1" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go-n 100</go>
@@ -4174,6 +4052,128 @@ repeat 75 [ go ]
     </enumeratedValueSet>
     <enumeratedValueSet variable="wolves-random?">
       <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-grass?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-wolves?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-see-sheep?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolf-gain-from-food">
+      <value value="0.7"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fov">
+      <value value="210"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="granularity">
+      <value value="2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-threshold">
+      <value value="70"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="hidden-nodes">
+      <value value="6"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-wolves">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="track-reactions?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="vision">
+      <value value="3"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-number-sheep">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolf-threshold">
+      <value value="70"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-gain-from-food">
+      <value value="5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="grass-regrowth-time">
+      <value value="30"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="bs-save-weights?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="single-brain?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initial-grass-density">
+      <value value="0.35"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="newborn-energy">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="2023-06-29_sheep-mut-rate-1M-by-100" repetitions="1" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go-n 100</go>
+    <timeLimit steps="10000"/>
+    <metric>ticks</metric>
+    <metric>count sheep</metric>
+    <metric>count wolves</metric>
+    <metric>grass</metric>
+    <metric>sheep-efficiency</metric>
+    <metric>sheep-escape-efficiency</metric>
+    <metric>wolf-efficiency</metric>
+    <metric>sheep-eat-attempts</metric>
+    <metric>wolf-eat-attempts</metric>
+    <metric>sheep-cert</metric>
+    <metric>sheep-lcert</metric>
+    <metric>sheep-scert</metric>
+    <metric>sheep-rcert</metric>
+    <metric>sheep-lnum</metric>
+    <metric>sheep-snum</metric>
+    <metric>sheep-rnum</metric>
+    <metric>sheep-lprob</metric>
+    <metric>sheep-sprob</metric>
+    <metric>sheep-rprob</metric>
+    <metric>wolf-cert</metric>
+    <metric>wolf-lcert</metric>
+    <metric>wolf-scert</metric>
+    <metric>wolf-rcert</metric>
+    <metric>wolf-lnum</metric>
+    <metric>wolf-snum</metric>
+    <metric>wolf-rnum</metric>
+    <metric>wolf-lprob</metric>
+    <metric>wolf-sprob</metric>
+    <metric>wolf-rprob</metric>
+    <enumeratedValueSet variable="mut-rate">
+      <value value="0.01"/>
+      <value value="0.02"/>
+      <value value="0.05"/>
+      <value value="0.1"/>
+      <value value="0.2"/>
+      <value value="0.5"/>
+      <value value="1"/>
+      <value value="2"/>
+      <value value="5"/>
+      <value value="10"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="crossover?">
+      <value value="false"/>
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-random?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-grass?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-sheep?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="sheep-see-wolves?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wolves-random?">
+      <value value="true"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="wolves-see-grass?">
       <value value="true"/>
