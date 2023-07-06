@@ -4647,7 +4647,7 @@ repeat 75 [ go ]
       <value value="0.1"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="2023-07-05_sheep-perception-1M-by-100" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="2023-07-05_wolf-perception-1M-by-100" repetitions="1" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go-n 100</go>
     <timeLimit steps="10000"/>
