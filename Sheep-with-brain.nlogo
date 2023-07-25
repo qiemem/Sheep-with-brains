@@ -1202,7 +1202,7 @@ fov
 fov
 30
 360
-210.0
+90.0
 60
 1
 NIL
@@ -1347,7 +1347,7 @@ SWITCH
 428
 wolves-random?
 wolves-random?
-1
+0
 1
 -1000
 
