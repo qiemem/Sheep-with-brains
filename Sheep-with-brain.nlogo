@@ -298,7 +298,7 @@ to go-n [ n ]
     set sheep-eat-attempts sheep-eat-attempts + num-sheep
     set wolf-eat-attempts wolf-eat-attempts + num-wolves
 
-    set sheep-cert sheep-cert + sheep-certainty
+    set sheep-cert sheep-cert + sheep-certainty * num-sheep
 
     let sheep-l filter-action sheep-probs 0
     set sheep-lcert sheep-lcert + sum sheep-l
@@ -316,7 +316,7 @@ to go-n [ n ]
     set sheep-sprob sheep-sprob + sum action-probs sheep-probs 1
     set sheep-rprob sheep-rprob + sum action-probs sheep-probs 2
 
-    set wolf-cert wolf-cert + wolf-certainty
+    set wolf-cert wolf-cert + wolf-certainty * num-wolves
 
     let wolf-l filter-action wolf-probs 0
     set wolf-lcert wolf-lcert + sum wolf-l
