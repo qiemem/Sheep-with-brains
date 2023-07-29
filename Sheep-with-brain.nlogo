@@ -1003,11 +1003,13 @@ to-report sample-eff [ n ]
     (ls:ask model [ ws ->
       (ls:ask sheep-brain [ w -> set-weights w ] ws)
     ] weights)
+    ls:assign model wolves-random? true
   ] [
     let weights [ get-weights ] ls:of brain
     (ls:ask model [ ws ->
       (ls:ask wolf-brain [ ws -> set-weights ws ] ws)
     ])
+    ls:assign model sheep-random? true
   ]
   let weff []
   let seff []
@@ -1202,7 +1204,7 @@ fov
 fov
 30
 360
-90.0
+210.0
 60
 1
 NIL
@@ -1270,7 +1272,7 @@ INPUTBOX
 80
 490
 mut-rate
-10.0
+0.1
 1
 0
 Number
@@ -1347,7 +1349,7 @@ SWITCH
 428
 wolves-random?
 wolves-random?
-0
+1
 1
 -1000
 
@@ -1546,7 +1548,7 @@ SWITCH
 253
 sheep-see-sheep?
 sheep-see-sheep?
-0
+1
 1
 -1000
 
@@ -1557,7 +1559,7 @@ SWITCH
 183
 wolves-see-grass?
 wolves-see-grass?
-0
+1
 1
 -1000
 
@@ -1568,7 +1570,7 @@ SWITCH
 218
 wolves-see-wolves?
 wolves-see-wolves?
-0
+1
 1
 -1000
 
