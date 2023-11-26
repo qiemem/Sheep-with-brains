@@ -82,6 +82,7 @@ turtles-own [
   brain
   null-brain
   probs
+  generation
 ]
 patches-own [countdown]
 
@@ -563,6 +564,7 @@ to reproduce [ threshold ]
   let child nobody
   hatch 1 [
     set energy baby-energy
+    set generation generation + 1
     setup-brain
 ;    ls:ask brain [
 ;      set-weights child-weights
@@ -1548,7 +1550,7 @@ SWITCH
 253
 sheep-see-sheep?
 sheep-see-sheep?
-1
+0
 1
 -1000
 
@@ -1559,7 +1561,7 @@ SWITCH
 183
 wolves-see-grass?
 wolves-see-grass?
-1
+0
 1
 -1000
 
@@ -1570,7 +1572,7 @@ SWITCH
 218
 wolves-see-wolves?
 wolves-see-wolves?
-1
+0
 1
 -1000
 
@@ -1786,6 +1788,29 @@ NIL
 NIL
 NIL
 1
+
+PLOT
+1275
+165
+1475
+315
+generations
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -13345367 true "" "plot mean [ generation ] of sheep"
+"pen-1" 1.0 0 -2674135 true "" "plot mean [ generation ] of wolves"
+"pen-2" 1.0 0 -8020277 true "" "plot min [ generation ] of sheep"
+"pen-3" 1.0 0 -14730904 true "" "plot max [ generation ] of sheep"
+"pen-4" 1.0 0 -1604481 true "" "plot min [ generation ] of wolves"
+"pen-5" 1.0 0 -8053223 true "" "plot max [ generation ] of wolves"
 
 @#$#@#$#@
 ## WHAT IS IT?
